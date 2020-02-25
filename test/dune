@@ -1,0 +1,8 @@
+(executable
+    (name Runner)
+    (libraries alcotest base ExcelSynth))
+
+(alias
+    (name runtest)
+    (deps Runner.exe)
+    (action (run %{deps})))

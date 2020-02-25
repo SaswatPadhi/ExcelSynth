@@ -1,0 +1,12 @@
+(executables
+    (names          App
+    )
+    (public_names   app
+    )
+    (libraries      core
+                    csv
+                    ExcelSynth
+    )
+    (preprocess
+      (pps          ppx_let))
+)

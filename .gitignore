@@ -1,3 +1,8 @@
+# - - -
+# OCaml
+# - - -
+
+# Compiler-generated intermediates
 *.annot
 *.cmo
 *.cma
@@ -19,11 +24,30 @@ _build/
 setup.data
 setup.log
 
-# Merlin configuring file for Vim and Emacs
+# dune/jbuilder generated files
 .merlin
-
-# Dune generated files
 *.install
 
 # Local OPAM switch
 _opam/
+
+# Temporaries
+ocamlprof.dump
+gmon.out
+config.h
+
+
+
+# - - -
+# Editor/IDE
+# - - -
+
+.vscode
+
+
+
+# - - -
+# External
+# - - -
+_*
+*.tgz
