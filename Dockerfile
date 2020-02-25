@@ -53,7 +53,7 @@ WORKDIR $HOME/ExcelSynth
 
 
 ENV LC_CTYPE=C.UTF-8
-RUN opam config exec -- dune build && dune runtest
+RUN opam config exec -- bash -c "dune build bin/App.exe --verbose && dune runtest --verbose"
 
 
 ENTRYPOINT [ "opam", "config", "exec", "--" ]
