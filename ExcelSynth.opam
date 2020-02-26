@@ -27,5 +27,6 @@ depends: [
   "alcotest"      {>= "0.8" & with-test}
   "core"          {>= "v0.13" & <= "v0.14"}
   "csv"           {>= "2.3"}
+  "lwt"           {>= "4.2.0"}
   "ppx_let"       {>= "v0.13" & <= "v0.14"}
 ]

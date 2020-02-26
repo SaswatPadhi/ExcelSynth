@@ -20,6 +20,7 @@ else
                        core.v0.13.0     \
                        csv.2.3          \
                        dune.1.6.0       \
+                       lwt.4.2.0        \
                        ppx_let.v0.13.0
 fi
 

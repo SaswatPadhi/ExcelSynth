@@ -43,6 +43,7 @@ RUN opam install --yes alcotest.0.8.5 \
                        core.v0.13.0 \
                        csv.2.4 \
                        dune.2.3.0 \
+                       lwt.5.1.1 \
                        ppx_let.v0.13.0 \
                        && \
     opam clean --yes && \
