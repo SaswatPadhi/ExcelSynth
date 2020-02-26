@@ -6,39 +6,46 @@ open ExcelSynth
 let config_flags =
   let open Command.Let_syntax in
   [%map_open
-    let aggregate_2d                = flag "enable-2d-aggregation" (no_arg_some true)
+    let aggregate_2d                = flag "enable-2d-aggregation"
+                                           (optional_with_default Driver.Config.default.aggregate_2d bool)
                                            ~doc:"BOOLEAN enable the use of 2D ranges in aggregation operations"
-    and col_pointwise               = flag "check-pointwise-col-operations" (no_arg_some true)
+    and col_pointwise               = flag "check-pointwise-col-operations"
+                                           (optional_with_default Driver.Config.default.col_pointwise bool)
                                            ~doc:"BOOLEAN attempt to synthesize pointwise transformations for columns"
     and cost_limit                  = flag "maximum-expression-cost"
                                            (optional_with_default Driver.Config.default._Synthesizer.cost_limit int)
                                            ~doc:"INTEGER maximum cost (AST size) of expressions to explore"
-    and disable_constant_solutions  = flag "disable-constant-solutions" (no_arg_some true)
+    and disable_constant_solutions  = flag "disable-constant-solutions"
+                                           (optional_with_default Driver.Config.default._Synthesizer.disable_constant_solutions bool)
                                            ~doc:"BOOLEAN disable constant formulas (e.g. =0.0) for cells"
-    and last_col_aggregate          = flag "check-last-col-aggregations" (no_arg_some true)
+    and last_col_aggregate          = flag "check-last-col-aggregations"
+                                           (optional_with_default Driver.Config.default.last_col_aggregate bool)
                                            ~doc:"BOOLEAN attempt to synthesize aggregation formulas for cells in the last column"
-    and last_row_aggregate          = flag "check-last-row-aggregations" (no_arg_some true)
+    and last_row_aggregate          = flag "check-last-row-aggregations"
+                                           (optional_with_default Driver.Config.default.last_row_aggregate bool)
                                            ~doc:"BOOLEAN attempt to synthesize aggregation formulas for cells in the last row"
     and max_threads                 = flag "max-threads"
                                            (optional_with_default Driver.Config.default.max_threads int)
                                            ~doc:"INTEGER maximum number of threads to create"
-    and row_pointwise               = flag "check-pointwise-row-operations" (no_arg_some true)
+    and row_pointwise               = flag "check-pointwise-row-operations"
+                                           (optional_with_default Driver.Config.default.row_pointwise bool)
                                            ~doc:"BOOLEAN attempt to synthesize pointwise transformations for rows"
-    and top_left_only               = flag "restrict-to-top-left-data" (no_arg_some true)
+    and top_left_only               = flag "restrict-to-top-left-data"
+                                           (optional_with_default Driver.Config.default.top_left_only bool)
                                            ~doc:"BOOLEAN only use data to the top left of a cell to synthesize a formula describing it"
      in {
        Driver.Config.default with
-       aggregate_2d = Option.value aggregate_2d ~default:Driver.Config.default.aggregate_2d ;
-       col_pointwise = Option.value col_pointwise ~default:Driver.Config.default.col_pointwise ;
-       last_col_aggregate = Option.value last_col_aggregate ~default:Driver.Config.default.last_col_aggregate ;
-       last_row_aggregate = Option.value last_row_aggregate ~default:Driver.Config.default.last_row_aggregate ;
+       aggregate_2d ;
+       col_pointwise ;
+       last_col_aggregate ;
+       last_row_aggregate ;
        max_threads ;
-       row_pointwise = Option.value row_pointwise ~default:Driver.Config.default.row_pointwise ;
-       top_left_only = Option.value top_left_only ~default:Driver.Config.default.top_left_only ;
+       row_pointwise ;
+       top_left_only ;
        _Synthesizer = {
          Driver.Config.default._Synthesizer with
          cost_limit ;
-         disable_constant_solutions = Option.value disable_constant_solutions ~default:Driver.Config.default._Synthesizer.disable_constant_solutions ;
+         disable_constant_solutions ;
        } ;
      } [@warning "-23"]
   ]

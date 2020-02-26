@@ -29,6 +29,7 @@ let rec to_string : t -> string = function
 let rec of_string (s : string) : t =
   try
     Num (Float.of_string s)
-  with Failure _ -> try
+  with Invalid_argument _ -> try
     Bool (Bool.of_string s)
-  with Invalid_argument _ -> String s
+  with Invalid_argument _ ->
+    String s

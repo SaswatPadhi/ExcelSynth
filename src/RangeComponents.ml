@@ -11,7 +11,7 @@ let aggregate = [
     domain = Type.[RANGE];
     can_apply = (function _ -> true);
     evaluate = Value.(function [@warning "-8"] [Range r]
-                      when Int.(List.((length r > 4) || (for_all r ~f:(fun re -> length re > 4))))
+                      when Int.(List.(fold r ~init:0 ~f:(fun acc re -> acc + (length re))) > 4)
                       -> Num (List.(fold r ~init:0.
                                          ~f:(fun acc re -> acc +. (fold re ~init:0. ~f:(fun acce (Num e) -> e +. acce))))));
     to_string = (fun [@warning "-8"] [a] -> "SUM(" ^ a ^ ")")
@@ -22,7 +22,7 @@ let aggregate = [
     domain = Type.[RANGE];
     can_apply = (function _ -> true);
     evaluate = Value.(function [@warning "-8"] [Range r]
-                      when Int.(List.((length r > 3) || (for_all r ~f:(fun re -> length re > 3))))
+                      when Int.(List.(fold r ~init:0 ~f:(fun acc re -> acc + (length re))) > 3)
                       -> Num ((List.(fold r ~init:0.
                                           ~f:(fun acc re -> acc +. ((fold re ~init:0. ~f:(fun acce (Num e) -> e +. acce))
                                                                     /. (Float.of_int (List.length re))))))

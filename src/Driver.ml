@@ -98,8 +98,8 @@ let make_range_problem ~(config : Config.t) (task : task) (r : int) (c : int) : 
                               ~f:(fun i acc row
                                   -> if i > r then acc else (
                                        (foldi row ~init:[] ~f:(fun j acc col -> if j >= c then acc else col :: acc)) :: acc)))
-            else Array.(foldi task.data.(r) ~init:[]
-                              ~f:(fun i acc col -> if i >= c then acc else [col] :: acc))
+            else Array.[foldi task.data.(r) ~init:[]
+                              ~f:(fun i acc col -> if i >= c then acc else col :: acc)]
           |]
         ]
       } else {
@@ -124,15 +124,15 @@ let make_range_problem ~(config : Config.t) (task : task) (r : int) (c : int) : 
             then Array.(fold task.data ~init:[]
                         ~f:(fun acc row
                             -> (foldi row ~init:[] ~f:(fun j acc col -> if j >= c then acc else col :: acc)) :: acc))
-            else Array.(foldi task.data.(r) ~init:[]
-                              ~f:(fun i acc col -> if i >= c then acc else [col] :: acc))
+            else Array.[foldi task.data.(r) ~init:[]
+                              ~f:(fun i acc col -> if i >= c then acc else col :: acc)]
           |] ; [|
             if config.aggregate_2d
             then Array.(fold task.data ~init:[]
                         ~f:(fun acc row
                             -> (foldi row ~init:[] ~f:(fun j acc col -> if j <= c then acc else col :: acc)) :: acc))
-            else Array.(foldi task.data.(r) ~init:[]
-                              ~f:(fun i acc col -> if i <= c then acc else [col] :: acc))
+            else Array.[foldi task.data.(r) ~init:[]
+                              ~f:(fun i acc col -> if i <= c then acc else col :: acc)]
           |]
         ]
       }
