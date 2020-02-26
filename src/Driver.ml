@@ -9,6 +9,7 @@ module Config = struct
     col_pointwise : bool ;
     last_col_aggregate : bool ;
     last_row_aggregate : bool ;
+    max_threads : int ;
     row_pointwise : bool ;
     top_left_only : bool ;
     _Synthesizer : Synthesizer.Config.t ;
@@ -19,6 +20,7 @@ module Config = struct
     col_pointwise = true ;
     last_col_aggregate = false ;
     last_row_aggregate = true ;
+    max_threads = 4 ;
     row_pointwise = false ;
     top_left_only = true ;
     _Synthesizer = Synthesizer.Config.default ;
@@ -178,21 +180,21 @@ let apply_range_formula ~(config : Config.t) ~(mask : string matrix)
     let ranges = if config.top_left_only
                  then begin
                    if config.aggregate_2d
-                   then [| "A1:" ^ (Excel.to_cell_name (r-1) c)
-                         ; "A1:" ^ (Excel.to_cell_name r (c-1)) |]
+                   then [| (Excel.to_cell_name 0 0) ^ ":" ^ (Excel.to_cell_name (r-1) c)
+                         ; (Excel.to_cell_name 0 0) ^ ":" ^ (Excel.to_cell_name r (c-1)) |]
                    else [| (Excel.to_cell_name 0 c) ^ ":" ^ (Excel.to_cell_name (r-1) c)
                          ; (Excel.to_cell_name r 0) ^ ":" ^ (Excel.to_cell_name r (c-1)) |]
                  end
                  else begin
                    if config.aggregate_2d
-                   then [| "A1:" ^ (Excel.to_cell_name (r-1) (clen-1))
-                         ; (Excel.to_cell_name (r+1) 0) ^ ":" ^ (Excel.to_cell_name (rlen-1) (clen-1))
-                         ; "A1:" ^ (Excel.to_cell_name (rlen-1) (c-1))
-                         ; (Excel.to_cell_name 0 (c+1)) ^ ":" ^ (Excel.to_cell_name (rlen-1) (clen-1)) |]
-                   else [| (Excel.to_cell_name 0 c) ^ ":" ^ (Excel.to_cell_name (r-1) c)
-                         ; (Excel.to_cell_name (r+1) c) ^ ":" ^ (Excel.to_cell_name (rlen-1) c)
-                         ; (Excel.to_cell_name r 0) ^ ":" ^ (Excel.to_cell_name r (c-1))
-                         ; (Excel.to_cell_name r (c+1)) ^ ":" ^ (Excel.to_cell_name r (clen-1)) |]
+                   then [| (Excel.to_cell_name     0 0)     ^ ":" ^ (Excel.to_cell_name    (r-1) (clen-1))
+                         ; (Excel.to_cell_name (r+1) 0)     ^ ":" ^ (Excel.to_cell_name (rlen-1) (clen-1))
+                         ; (Excel.to_cell_name     0 0)     ^ ":" ^ (Excel.to_cell_name (rlen-1) (c-1))
+                         ; (Excel.to_cell_name     0 (c+1)) ^ ":" ^ (Excel.to_cell_name (rlen-1) (clen-1)) |]
+                   else [| (Excel.to_cell_name     0 c)     ^ ":" ^ (Excel.to_cell_name    (r-1) c)
+                         ; (Excel.to_cell_name (r+1) c)     ^ ":" ^ (Excel.to_cell_name (rlen-1) c)
+                         ; (Excel.to_cell_name     r 0)     ^ ":" ^ (Excel.to_cell_name        r (c-1))
+                         ; (Excel.to_cell_name     r (c+1)) ^ ":" ^ (Excel.to_cell_name        r (clen-1)) |]
                  end
       in "=" ^ (Expr.to_string ranges e)
    in function None -> ()
@@ -215,21 +217,32 @@ let run ?(config = Config.default) (task : task) : string matrix =
           try Some (Synthesizer.solve ~config:config._Synthesizer problem)
           with NoSuchFunction -> None
          in
-            (if config.last_row_aggregate && rlen > 2 then
-              List.(iter (range 0 clen)
-                         ~f:(fun c -> if String.is_empty mask.(rlen-1).(c)
-                                      then apply_range_formula (rlen-1) c (solver (make_range_problem (rlen-1) c)))))
-          ; (if config.last_col_aggregate && clen > 2 then
-              List.(iter (range 0 rlen)
-                         ~f:(fun r -> if String.is_empty mask.(r).(clen-1)
-                                      then apply_range_formula r (clen-1) (solver (make_range_problem r (clen-1))))))
+            Lwt_preemptive.(simple_init () ; set_bounds (0, config.max_threads) ; set_max_number_of_threads_queued 1024)
+          ; (if config.last_row_aggregate && rlen > 2
+             then Lwt_main.run (
+                    Lwt_list.iter_p (fun c -> if String.is_empty mask.(rlen-1).(c)
+                                              then let work () = apply_range_formula (rlen-1) c (solver (make_range_problem (rlen-1) c))
+                                                    in Lwt_preemptive.detach work ()
+                                              else Lwt.return ())
+                                    (List.range 0 clen)))
+          ; (if config.last_col_aggregate && clen > 2
+             then Lwt_main.run (
+                    Lwt_list.iter_p (fun r -> if String.is_empty mask.(r).(clen-1)
+                                              then let work () = apply_range_formula r (clen-1) (solver (make_range_problem r (clen-1)))
+                                                    in Lwt_preemptive.detach work ()
+                                              else Lwt.return ())
+                                    (List.range 0 rlen)))
           ; (if config.col_pointwise
-             then List.(iter (range 0 clen)
-                             ~f:(fun c -> let row_mask = Some (Array.map mask ~f:(fun row -> String.is_empty row.(c)))
-                                           in apply_col_formula ~row_mask c (solver (make_pointwise_col_problem ~row_mask c)))))
+             then Lwt_main.run (
+                    Lwt_list.iter_p (fun c -> let row_mask = Some (Array.map mask ~f:(fun row -> String.is_empty row.(c))) in
+                                              let work () = apply_col_formula ~row_mask c (solver (make_pointwise_col_problem ~row_mask c))
+                                               in Lwt_preemptive.detach work ())
+                                    (List.range 0 clen)))
           ; (if config.row_pointwise
-             then List.(iter (range 0 rlen)
-                             ~f:(fun r -> let col_mask = Some (Array.map mask.(r) ~f:String.is_empty)
-                                           in apply_row_formula ~col_mask r (solver (make_pointwise_row_problem ~col_mask r)))))
+             then Lwt_main.run (
+                    Lwt_list.iter_p (fun r -> let col_mask = Some (Array.map mask.(r) ~f:String.is_empty) in
+                                              let work () = apply_row_formula ~col_mask r (solver (make_pointwise_row_problem ~col_mask r))
+                                               in Lwt_preemptive.detach work ())
+                                    (List.range 0 rlen)))
           ; mask
       end

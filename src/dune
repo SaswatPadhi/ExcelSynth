@@ -20,6 +20,6 @@
 (library
     (name ExcelSynth)
     (public_name ExcelSynth)
-    (libraries core str)
+    (libraries lwt.unix core)
     (preprocessor_deps (file config.h))
     (preprocess (pps ppx_optcomp ppx_compare ppx_sexp_conv)))

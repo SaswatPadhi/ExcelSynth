@@ -19,6 +19,9 @@ let config_flags =
                                            ~doc:"BOOLEAN attempt to synthesize aggregation formulas for cells in the last column"
     and last_row_aggregate          = flag "check-last-row-aggregations" (no_arg_some true)
                                            ~doc:"BOOLEAN attempt to synthesize aggregation formulas for cells in the last row"
+    and max_threads                 = flag "max-threads"
+                                           (optional_with_default Driver.Config.default.max_threads int)
+                                           ~doc:"INTEGER maximum number of threads to create"
     and row_pointwise               = flag "check-pointwise-row-operations" (no_arg_some true)
                                            ~doc:"BOOLEAN attempt to synthesize pointwise transformations for rows"
     and top_left_only               = flag "restrict-to-top-left-data" (no_arg_some true)
@@ -29,6 +32,7 @@ let config_flags =
        col_pointwise = Option.value col_pointwise ~default:Driver.Config.default.col_pointwise ;
        last_col_aggregate = Option.value last_col_aggregate ~default:Driver.Config.default.last_col_aggregate ;
        last_row_aggregate = Option.value last_row_aggregate ~default:Driver.Config.default.last_row_aggregate ;
+       max_threads ;
        row_pointwise = Option.value row_pointwise ~default:Driver.Config.default.row_pointwise ;
        top_left_only = Option.value top_left_only ~default:Driver.Config.default.top_left_only ;
        _Synthesizer = {
