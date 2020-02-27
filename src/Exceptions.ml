@@ -18,3 +18,5 @@ exception NoSuchFunction
 (* raised by a postcondition to indicate
    that the given test input should be ignored *)
 exception IgnoreTest
+
+exception NoMajorityType

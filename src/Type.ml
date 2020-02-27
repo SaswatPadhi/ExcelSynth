@@ -3,8 +3,9 @@ open Core
 open Exceptions
 
 module T = struct
-  type t = NUM
-         | BOOL
+  type t = BOOL
+         | ERROR
+         | NUM
          | STRING
          | RANGE
          [@@deriving compare,sexp]

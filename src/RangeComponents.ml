@@ -40,7 +40,7 @@ let drop_head = aggregate @ [
     evaluate = Value.(function [@warning "-8"] [Range r] when Int.(List.length r > 1)
                       -> Range (List.drop r 1));
     to_string = (fun [@warning "-8"] [a] -> try Excel.offset_range a 1 0 0 0
-                                            with _ -> "OFFSET("^ a ^ ",1,0,0,0)")
+                                            with _ -> "DROP_TOP("^ a ^ ")")
   } ;
    {
     name = "range-drop-left";
@@ -50,7 +50,7 @@ let drop_head = aggregate @ [
     evaluate = Value.(function [@warning "-8"] [Range r] when List.(for_all r ~f:(fun re -> Int.(length re > 1)))
                       -> Range (List.(map r ~f:(fun re -> drop re 1))));
     to_string = (fun [@warning "-8"] [a] -> try Excel.offset_range a 0 1 0 0
-                                            with _ -> "OFFSET("^ a ^ ",0,1,0,0)")
+                                            with _ -> "DROP_LEFT("^ a ^ ")")
   }
 ]
 
@@ -63,7 +63,7 @@ let drop_tail = drop_head @ [
     evaluate = Value.(function [@warning "-8"] [Range r] when Int.(List.length r > 1)
                       -> Range (List.drop_last_exn r));
     to_string = (fun [@warning "-8"] [a] -> try Excel.offset_range a 0 0 (-1) 0
-                                            with _ -> "OFFSET("^ a ^ ",0,0,-1,0)")
+                                            with _ -> "DROP_BOTTOM("^ a ^ ")")
   } ;
    {
     name = "range-drop-right";
@@ -74,7 +74,7 @@ let drop_tail = drop_head @ [
                       when List.(for_all r ~f:(fun re -> Int.(length re > 1)))
                       -> Range (List.(map r ~f:drop_last_exn)));
     to_string = (fun [@warning "-8"] [a] -> try Excel.offset_range a 0 0 0 (-1)
-                                            with _ -> "OFFSET("^ a ^ ",0,0,0,-1)")
+                                            with _ -> "DROP_RIGHT("^ a ^ ")")
   }
 ]
 

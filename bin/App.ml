@@ -8,10 +8,10 @@ let config_flags =
   [%map_open
     let aggregate_2d                = flag "enable-2d-aggregation"
                                            (optional_with_default Driver.Config.default.aggregate_2d bool)
-                                           ~doc:"BOOLEAN enable the use of 2D ranges in aggregation operations"
+                                           ~doc:"BOOLEAN use 2D ranges in aggregation operations"
     and col_pointwise               = flag "check-pointwise-col-operations"
                                            (optional_with_default Driver.Config.default.col_pointwise bool)
-                                           ~doc:"BOOLEAN attempt to synthesize pointwise transformations for columns"
+                                           ~doc:"BOOLEAN synthesize pointwise transformations for columns"
     and cost_limit                  = flag "maximum-expression-cost"
                                            (optional_with_default Driver.Config.default._Synthesizer.cost_limit int)
                                            ~doc:"INTEGER maximum cost (AST size) of expressions to explore"
@@ -20,19 +20,22 @@ let config_flags =
                                            ~doc:"BOOLEAN disable constant formulas (e.g. =0.0) for cells"
     and last_col_aggregate          = flag "check-last-col-aggregations"
                                            (optional_with_default Driver.Config.default.last_col_aggregate bool)
-                                           ~doc:"BOOLEAN attempt to synthesize aggregation formulas for cells in the last column"
+                                           ~doc:"BOOLEAN synthesize aggregation formulas for cells in the last column"
     and last_row_aggregate          = flag "check-last-row-aggregations"
                                            (optional_with_default Driver.Config.default.last_row_aggregate bool)
-                                           ~doc:"BOOLEAN attempt to synthesize aggregation formulas for cells in the last row"
+                                           ~doc:"BOOLEAN synthesize aggregation formulas for cells in the last row"
     and max_threads                 = flag "max-threads"
                                            (optional_with_default Driver.Config.default.max_threads int)
                                            ~doc:"INTEGER maximum number of threads to create"
     and row_pointwise               = flag "check-pointwise-row-operations"
                                            (optional_with_default Driver.Config.default.row_pointwise bool)
-                                           ~doc:"BOOLEAN attempt to synthesize pointwise transformations for rows"
+                                           ~doc:"BOOLEAN synthesize pointwise transformations for rows"
     and top_left_only               = flag "restrict-to-top-left-data"
                                            (optional_with_default Driver.Config.default.top_left_only bool)
-                                           ~doc:"BOOLEAN only use data to the top left of a cell to synthesize a formula describing it"
+                                           ~doc:"BOOLEAN only use data to the top left of a cell in formulas"
+    and type_error_threshold        = flag "type-error-threshold"
+                                           (optional_with_default Driver.Config.default._Synthesizer.type_error_threshold float)
+                                           ~doc:"FLOAT maximum fraction of cells that may be ignored due to type errors"
      in {
        Driver.Config.default with
        aggregate_2d ;
@@ -46,6 +49,7 @@ let config_flags =
          Driver.Config.default._Synthesizer with
          cost_limit ;
          disable_constant_solutions ;
+         type_error_threshold ;
        } ;
      } [@warning "-23"]
   ]

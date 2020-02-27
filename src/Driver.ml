@@ -37,11 +37,10 @@ type task = {
 
 let make_pointwise_row_problem ~(config : Config.t) ~(col_mask : bool array option)
                                (task : task) (r : int) : Synthesizer.task =
-  let num_args = if config.top_left_only then r else ((Array.length task.data) - 1) in
   let constants = task.constants
    in match col_mask with
   | None -> {
-      constants ; num_args ;
+      constants ;
       inputs = List.rev (
         Array.foldi task.data ~init:[]
                     ~f:(fun i acc a -> if (i = r) || (config.top_left_only && i > r) then acc
@@ -49,7 +48,7 @@ let make_pointwise_row_problem ~(config : Config.t) ~(col_mask : bool array opti
       outputs = task.data.(r) ;
     }
   | Some cm -> {
-      constants ; num_args ;
+      constants ;
       inputs = List.rev (
         Array.foldi task.data ~init:[]
                     ~f:(fun i acc a -> if (i = r) || (config.top_left_only && i > r) then acc
@@ -59,11 +58,10 @@ let make_pointwise_row_problem ~(config : Config.t) ~(col_mask : bool array opti
 
 let make_pointwise_col_problem ~(config : Config.t) ~(row_mask : bool array option)
                                (task : task) (c : int) : Synthesizer.task =
-  let num_args = if config.top_left_only then c else ((Array.length task.data.(0)) - 1) in
   let constants = task.constants
    in match row_mask with
       | None -> {
-          constants ; num_args ;
+          constants ;
           inputs = List.rev (
             Array.(foldi task.data.(0) ~init:[]
                          ~f:(fun i acc _ -> if (i = c) || (config.top_left_only && i > c) then acc
@@ -71,7 +69,7 @@ let make_pointwise_col_problem ~(config : Config.t) ~(row_mask : bool array opti
           outputs = Array.map task.data ~f:(fun a -> a.(c)) ;
         }
       | Some rm -> {
-          constants ; num_args ;
+          constants ;
           inputs = List.rev (
             Array.(foldi task.data.(0) ~init:[]
                          ~f:(fun i acc _ -> if (i = c) || (config.top_left_only && i > c) then acc
@@ -83,7 +81,7 @@ let make_range_problem ~(config : Config.t) (task : task) (r : int) (c : int) : 
   let constants = task.constants and outputs = [| task.data.(r).(c) |]
    in if config.top_left_only
       then {
-        constants ; num_args = 2 ; outputs ;
+        constants ; outputs ;
         inputs = List.(map ~f:(fun a -> Array.map a ~f:(fun l -> Value.Range (rev (map l ~f:rev))))) [
           [|
             if config.aggregate_2d
@@ -104,7 +102,7 @@ let make_range_problem ~(config : Config.t) (task : task) (r : int) (c : int) : 
           |]
         ]
       } else {
-        constants ; num_args = 4 ; outputs ;
+        constants ; outputs ;
         inputs = List.(map ~f:(fun a -> Array.map a ~f:(fun l -> Value.Range (rev (map l ~f:rev))))) [
           [|
             if config.aggregate_2d
@@ -139,7 +137,7 @@ let make_range_problem ~(config : Config.t) (task : task) (r : int) (c : int) : 
       }
 
 let apply_row_formula ~(config : Config.t) ~(mask : string matrix) ~(col_mask : bool array option)
-                      (r : int) : (Expr.t option -> unit) =
+                      (r : int) : (Expr.synthesized option -> unit) =
   let row_formula (c : int) (e : Expr.t) : string =
     let cells = Array.(foldi mask ~init:[]
                              ~f:(fun i acc _ -> if (i = r) || (config.top_left_only && i > r) then acc
@@ -147,12 +145,14 @@ let apply_row_formula ~(config : Config.t) ~(mask : string matrix) ~(col_mask : 
       in "=" ^ (Expr.to_string (Array.of_list_rev cells) e)
    in match col_mask with
       | None -> (function None -> ()
-                        | Some res -> Array.iteri mask.(0) ~f:(fun c _ -> mask.(r).(c) <- row_formula c res))
+                        | Some res -> Array.iteri mask.(0) ~f:(fun c _ -> if Value.(res.outputs.(c) <> Error)
+                                                                          then mask.(r).(c) <- row_formula c res.expr))
       | Some cm -> (function None -> ()
-                           | Some res -> Array.iteri mask.(0) ~f:(fun c _ -> if cm.(c) then mask.(r).(c) <- row_formula c res))
+                           | Some res -> Array.iteri mask.(0) ~f:(fun c _ -> if cm.(c) && Value.(res.outputs.(c) <> Error)
+                                                                             then mask.(r).(c) <- row_formula c res.expr))
 
 let apply_col_formula ~(config : Config.t) ~(mask : string matrix) ~(row_mask : bool array option)
-                      (c : int) : (Expr.t option -> unit) =
+                      (c : int) : (Expr.synthesized option -> unit) =
   let col_formula (r : int) (e : Expr.t) : string =
     let cells = Array.(foldi mask.(0) ~init:[]
                              ~f:(fun i acc _ -> if (i = c) || (config.top_left_only && i > c) then acc
@@ -160,12 +160,14 @@ let apply_col_formula ~(config : Config.t) ~(mask : string matrix) ~(row_mask : 
       in "=" ^ (Expr.to_string (Array.of_list_rev cells) e)
    in match row_mask with
       | None -> (function None -> ()
-                        | Some res -> Array.iteri mask ~f:(fun r _ -> mask.(r).(c) <- col_formula r res))
+                        | Some res -> Array.iteri mask ~f:(fun r _ -> if Value.(res.outputs.(r) <> Error)
+                                                                      then mask.(r).(c) <- col_formula r res.expr))
       | Some rm -> (function None -> ()
-                           | Some res -> Array.iteri mask ~f:(fun r _ -> if rm.(r) then mask.(r).(c) <- col_formula r res))
+                           | Some res -> Array.iteri mask ~f:(fun r _ -> if rm.(r) && Value.(res.outputs.(r) <> Error)
+                                                                         then mask.(r).(c) <- col_formula r res.expr))
 
 let apply_range_formula ~(config : Config.t) ~(mask : string matrix)
-                        (r : int) (c : int) : (Expr.t option -> unit) =
+                        (r : int) (c : int) : (Expr.synthesized option -> unit) =
   let rlen = Array.length mask and clen = Array.length mask.(0) in
   let range_formula (e : Expr.t) : string =
     let ranges = if config.top_left_only
@@ -189,7 +191,7 @@ let apply_range_formula ~(config : Config.t) ~(mask : string matrix)
                  end
       in "=" ^ (Expr.to_string ranges e)
    in function None -> ()
-             | Some res -> mask.(r).(c) <- range_formula res
+             | Some res -> mask.(r).(c) <- range_formula res.expr
 
 let run ?(config = Config.default) (task : task) : string matrix =
   let cols = Array.(fold task.data ~init:(length task.data.(0))

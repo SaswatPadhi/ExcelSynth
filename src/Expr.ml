@@ -40,17 +40,6 @@ let rec to_string arg_names = function
   | Constant v -> Value.to_string v
   | Variable i -> arg_names.(i)
 
-let rec to_function = function
-  | Application (comp, comp_args)
-    -> let arg_funcs = List.map ~f:to_function comp_args
-        in (fun args -> comp.evaluate (List.map arg_funcs ~f:(fun afunc -> afunc args)))
-  | Constant v -> (fun _ -> v)
-  | Variable i -> (fun args -> List.nth_exn args i)
-
-let rec height = function
-  | Application (_, args) -> 1 + (List.fold_left ~f:max ~init:0 (List.map ~f:height args))
-  | _ -> 1
-
 let rec size = function
   | Application (_, args) -> List.fold_left ~f:(+) ~init:1 (List.map ~f:size args)
   | _ -> 1
@@ -60,12 +49,26 @@ type synthesized = {
   outputs : Value.t array ;
 } [@@deriving sexp]
 
-let apply (comp : component) (args : synthesized list) : synthesized option =
-  if (not (comp.can_apply (List.map args ~f:(fun arg -> arg.expr)))) then None
-  else try
-    let select idx = List.map args ~f:(fun arg -> arg.outputs.(idx))
-     in Some { expr = Application (comp, List.map ~f:(fun arg -> arg.expr) args)
-             ; outputs = Array.mapi (List.hd_exn args).outputs
-                                    ~f:(fun i _ -> comp.evaluate (select i)) }
-  with Internal_Exn _ as e -> raise e
-     | _ -> None
+let apply ?(type_error_threshold = 0.0) (comp : component) (args : synthesized list) : synthesized option =
+  let subexprs = List.map args ~f:(fun arg -> arg.expr)
+   in if not (comp.can_apply subexprs) then None
+      else try
+        let select idx = List.map args ~f:(fun arg -> arg.outputs.(idx)) in
+        let errors = ref 0. and length = ref 0. in
+        let outputs = Array.mapi (List.hd_exn args).outputs
+                                 ~f:(fun i _ -> try length := !length +. 1.
+                                                  ; comp.evaluate (select i)
+                                                with Match_failure _ -> errors := !errors +. 1.
+                                                                      ; Value.Error)
+         in let type_error_rate = Float.(!errors / !length)
+             in if Float.(type_error_rate > type_error_threshold) then None
+                else begin
+                  let expr = Application (comp, subexprs)
+                   in Log.debug (lazy ("    @ error rate " ^ Float.(to_string type_error_rate) ^ ":"))
+                    ; Log.debug (lazy ("      " ^ (to_string (Array.of_list_map (List.range 0 1024)
+                                                                                ~f:(fun i -> "v" ^ (Int.to_string i)))
+                                                             expr)))
+                    ; Some { expr ; outputs }
+                end
+      with Internal_Exn _ as e -> raise e
+         | e -> None

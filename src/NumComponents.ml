@@ -2,7 +2,7 @@ open Base
 
 open Expr
 
-let pos_div x y = (x - (x % y)) / y
+let pos_div x y = (x - (Caml.Int.rem x y)) / y
 
 let equality = [
   {
@@ -165,7 +165,7 @@ let peano = polynomials @ [
                        | _ -> false);
     evaluate = Value.(function [@warning "-8"]
                       [Num x ; Num y] when Float.(y <> 0.) && Caml.Float.((is_integer x) && (is_integer y))
-                      -> Num (Float.of_int (pos_div (Float.to_int x) (Float.to_int x))));
+                      -> Num Float.(of_int (pos_div (to_int x) (to_int x))));
     to_string = (fun [@warning "-8"] [a ; b] -> "QUOTIENT(" ^ a ^ "," ^ b ^ ")")
   } ;
   {
@@ -179,7 +179,7 @@ let peano = polynomials @ [
                        | _ -> false);
     evaluate = Value.(function [@warning "-8"]
                       [Num x ; Num y] when Float.(y <> 0.) && Caml.Float.((is_integer x) && (is_integer y))
-                      -> Num (Float.of_int ((Float.to_int x) % (Float.to_int y))));
+                      -> Num Float.(of_int (Caml.Int.rem (to_int x) (to_int y))));
     to_string = (fun [@warning "-8"] [a ; b] -> "MOD(" ^ a ^ "," ^ b ^ ")")
   }
 ]

@@ -20,6 +20,7 @@ module Config = struct
     components_per_level : Expr.component list array ;
     cost_limit : int ;
     disable_constant_solutions : bool ;
+    type_error_threshold : float ;
     max_expressiveness_level : int ;
     order : int -> int -> float ;
   }
@@ -28,19 +29,19 @@ module Config = struct
     components_per_level = BooleanComponents.levels ++ NumComponents.non_linear_levels ++ RangeComponents.levels ;
     cost_limit = 9 ;
     disable_constant_solutions = true ;
+    type_error_threshold = 0.333333 ;
     max_expressiveness_level = 1024 ;
     order = (fun g_cost e_cost -> (Int.to_float e_cost) *. (Float.log (Int.to_float g_cost))) ;
   }
 end
 
 type task = {
-  num_args : int ;
   inputs : Value.t array list ;
   outputs : Value.t array ;
-  constants : Value.t list
+  constants : Value.t list ;
 }
 
-exception Success of Expr.t
+exception Success of Expr.synthesized
 
 module DList = Doubly_linked
 
@@ -58,7 +59,7 @@ let divide_size applier arity op_level expr_level remaining_size =
           done
         done
       end
-  in let rec neq_helper arity remaining_size acc =
+  and neq_helper arity remaining_size acc =
     if arity = 1 then
       if List.exists acc ~f:(fun (l,_) -> l = expr_level) then
         begin
@@ -76,9 +77,9 @@ let divide_size applier arity op_level expr_level remaining_size =
           done
         done
       end
-  in if expr_level = op_level
-     then eq_helper arity remaining_size []
-     else neq_helper arity remaining_size []
+   in if expr_level = op_level
+      then eq_helper arity remaining_size []
+      else neq_helper arity remaining_size []
 
 module Output = struct
   module T = struct
@@ -132,12 +133,12 @@ let solve_impl (config : Config.t) (task : task) =
   let string_candidates = empty_candidates () in
   let range_candidates = empty_candidates () in
 
-  let typed_candidates = function
+  let [@warning "-8"] typed_candidates = function
     | Type.NUM    -> num_candidates
     | Type.BOOL   -> bool_candidates
     | Type.STRING -> string_candidates
     | Type.RANGE  -> range_candidates
-  in
+   in
 
   let seen_outputs = ref (Set.empty (module Output)) in
   let add_candidate candidates_set level cost (candidate : Expr.synthesized) =
@@ -145,74 +146,75 @@ let solve_impl (config : Config.t) (task : task) =
      in seen_outputs := Set.add !seen_outputs candidate.outputs
       ; if (Set.length !seen_outputs) = old_size then false
         else (ignore (DList.insert_last candidates_set.(level).(cost) candidate) ; true)
-  in
+   in
 
   let constants = Value.(
     List.dedup_and_sort ~compare
        ( Value.[ Num 0. ; Num 1. ; Bool true ; Bool false ]
        @ (List.map task.constants ~f:(function Num x -> Num (Float.abs x) | x -> x))))
-  in
-  let add_constant_candidate value =
+  and add_constant_candidate value =
     let candidate : Expr.synthesized = {
       expr = Expr.Constant value;
       outputs = Array.create ~len:(Array.length task.outputs) value;
     } in ignore (add_candidate (typed_candidates (Value.typeof value)) 0 1 candidate)
-  in List.(iter (rev constants) ~f:add_constant_candidate)
+   in
+
+  List.(iter (rev constants) ~f:add_constant_candidate) ;
+
+  List.iteri task.inputs
+             ~f:(fun i input -> ignore (add_candidate (typed_candidates (Value.majority_type input)) 0 1
+                                                      { expr = Expr.Variable i ; outputs = input }))
   ;
 
-  List.iteri task.inputs ~f:(fun i input ->
-    ignore (add_candidate (typed_candidates (Value.typeof input.(0))) 0 1
-                          { expr = Expr.Variable i ; outputs = input }))
-  ;
-
-  let f_cost = Expr.size and f_divide = divide_size in
-
+  let value_equal_approx = Value.(fun v1 v2 -> v2 = Error || equal v1 v2) in
   let check (candidate : Expr.synthesized) =
-    if config.disable_constant_solutions && Expr.is_constant candidate.expr
-    then ()
-    else if Array.equal Value.equal task.outputs candidate.outputs
-         then raise (Success candidate.expr)
-  in
+    if not (config.disable_constant_solutions && Expr.is_constant candidate.expr)
+    then if Array.equal value_equal_approx task.outputs candidate.outputs
+         then raise (Success candidate)
+   in
 
-  let task_codomain = Value.typeof task.outputs.(0) in
+  let task_codomain = Value.majority_type task.outputs in
 
   DList.iter ~f:check (typed_candidates task_codomain).(0).(1) ;
 
-  let apply_component op_level expr_level cost arg_types applier =
-    let rec apply_cells acc arg_types locations =
-      match arg_types , locations with
+  let f_cost = Expr.size and f_divide = divide_size in
+
+  let apply_component op_level expr_level cost domain applier =
+    let rec apply_cells acc domain locations =
+      match domain , locations with
       | typ :: arg_types , (lvl,loc) :: locations
         -> DList.iter (typed_candidates typ).(lvl).(loc)
                       ~f:(fun x -> apply_cells (x :: acc) arg_types locations)
       | ([], []) -> applier (List.rev acc)
       | _ -> raise (Internal_Exn "Impossible case!")
-    in f_divide (apply_cells [] arg_types) (List.length arg_types) op_level expr_level (cost - 1)
-  in
+     in f_divide (apply_cells [] domain) (List.length domain) op_level expr_level (cost - 1)
+   in
   let expand_component op_level expr_level cost candidates (component : Expr.component) =
     let applier args =
-      match Expr.apply component args with
+      match Expr.apply ~type_error_threshold:config.type_error_threshold component args with
       | None -> ()
       | Some result
         -> let expr_cost = f_cost result.expr
             in (if expr_cost < config.cost_limit
                 then (if Type.equal task_codomain component.codomain then check result))
              ; ignore (add_candidate candidates expr_level expr_cost result)
-    in apply_component op_level expr_level cost component.domain applier
-  in
+     in apply_component op_level expr_level cost component.domain applier
+   in
   let ordered_level_cost =
     let grammar_cost level = (List.length constants) * (List.length config.components_per_level.(level-1))
-    in List.sort ~compare:(fun (level1,cost1) (level2,cost2)
+     in List.sort ~compare:(fun (level1,cost1) (level2,cost2)
                            -> Float.compare (config.order (grammar_cost level1) cost1)
                                             (config.order (grammar_cost level2) cost2))
-                 (List.(cartesian_product (range 1 ~stop:`inclusive (Int.min config.max_expressiveness_level
-                                                                             (Array.length config.components_per_level)))
-                                          (range 2 config.cost_limit)))
-  in
+                  (List.(cartesian_product (range 1 ~stop:`inclusive (Int.min config.max_expressiveness_level
+                                                                              (Array.length config.components_per_level)))
+                                           (range 2 config.cost_limit)))
+   in
+
   Log.debug (lazy ( "  > Exploration order:")) ;
-  Log.debug (lazy (
-    List.to_string_map ordered_level_cost ~sep:" > "
-                       ~f:(fun (l,c) -> "(G" ^ (Int.to_string l) ^ "," ^ (Int.to_string c) ^ ")")
-  ));
+  Log.debug (lazy ("    " ^ (List.to_string_map ordered_level_cost ~sep:" > "
+                                                ~f:(fun (l,c) -> "(G" ^ (Int.to_string l)
+                                                               ^ "," ^ (Int.to_string c) ^ ")"))));
+  Log.debug (lazy ("  > Checking expressions:")) ;
 
   let seen_level_cost = ref (Set.empty (module IntTuple)) in
   List.iter ordered_level_cost
@@ -233,18 +235,20 @@ let solve_impl (config : Config.t) (task : task) =
                                      ~f:(fun (cands, comps)
                                            -> iter comps ~f:(expand_component l level cost cands)))))
 
-let solve ?(config = Config.default) (task : task) : Expr.t =
+let solve ?(config = Config.default) (task : task) : Expr.synthesized =
   Log.debug (lazy ("Starting hybrid enumeration:")) ;
   Log.debug (lazy ("  > Output:")) ;
   Log.debug (lazy ("    [" ^ (Array.to_string_map task.outputs ~sep:"," ~f:Value.to_string) ^ "]")) ;
   Log.debug (lazy ("  > Inputs:")) ;
   List.(iteri task.inputs
-              ~f:(fun i input -> Log.debug (lazy ("    + v" ^ (Int.to_string i) ^ ": [" ^
-                                                  (Array.to_string_map input ~sep:"," ~f:Value.to_string) ^ "]")))) ;
-  try solve_impl config task ; raise NoSuchFunction
-  with Success expr
-       -> Log.debug (lazy ("  % Solution (@ size " ^ (Int.to_string (Expr.size expr)) ^ "):"))
-        ; Log.debug (lazy (Expr.to_string (Array.of_list_map (List.range 0 task.num_args)
-                                                             ~f:(fun i -> "v" ^ (Int.to_string i)))
-                                          expr))
-        ; expr
+              ~f:(fun i input -> Log.debug (lazy ("    + v" ^ (Int.to_string i) ^ ": [ " ^
+                                                  (Array.to_string_map input ~sep:" ; " ~f:Value.to_string) ^ " ]")))) ;
+  try solve_impl config task
+    ; Log.debug (lazy ("  % NO SOLUTION FOUND!"))
+    ; raise NoSuchFunction
+  with NoMajorityType -> raise NoSuchFunction
+     | Success candidate
+       -> Log.debug (lazy ("  % Solution (@ size " ^ (Int.to_string (Expr.size candidate.expr)) ^ "):"))
+        ; Log.debug (lazy ("    " ^ (Expr.to_string (Array.of_list_mapi task.inputs ~f:(fun i _ -> "v" ^ (Int.to_string i)))
+                                                    candidate.expr)))
+        ; candidate
