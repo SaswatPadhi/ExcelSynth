@@ -140,39 +140,29 @@ let make_range_problem ~(config : Config.t) (task : task) (r : int) (c : int) : 
 
 let apply_row_formula ~(config : Config.t) ~(mask : string matrix) ~(col_mask : bool array option)
                       (r : int) : (Expr.t option -> unit) =
-  let rlen = Array.length mask and clen = Array.length mask.(0) in
   let row_formula (c : int) (e : Expr.t) : string =
-    let cells = List.(fold (range 0 rlen) ~init:[]
-                            ~f:(fun acc i -> if (i = r) || (config.top_left_only && i > r) then acc
-                                            else ((Excel.to_cell_name i c) :: acc)))
+    let cells = Array.(foldi mask ~init:[]
+                             ~f:(fun i acc _ -> if (i = r) || (config.top_left_only && i > r) then acc
+                                                else ((Excel.to_cell_name i c) :: acc)))
       in "=" ^ (Expr.to_string (Array.of_list_rev cells) e)
    in match col_mask with
       | None -> (function None -> ()
-                        | Some res -> List.(
-                            iter (range 0 clen)
-                                 ~f:(fun c -> mask.(r).(c) <- row_formula c res)))
+                        | Some res -> Array.iteri mask.(0) ~f:(fun c _ -> mask.(r).(c) <- row_formula c res))
       | Some cm -> (function None -> ()
-                           | Some res -> List.(
-                               iter (range 0 clen)
-                                    ~f:(fun c -> if cm.(c) then mask.(r).(c) <- row_formula c res)))
+                           | Some res -> Array.iteri mask.(0) ~f:(fun c _ -> if cm.(c) then mask.(r).(c) <- row_formula c res))
 
 let apply_col_formula ~(config : Config.t) ~(mask : string matrix) ~(row_mask : bool array option)
                       (c : int) : (Expr.t option -> unit) =
-  let rlen = Array.length mask and clen = Array.length mask.(0) in
   let col_formula (r : int) (e : Expr.t) : string =
-    let cells = List.(fold (range 0 clen) ~init:[]
-                            ~f:(fun acc i -> if (i = c) || (config.top_left_only && i > c) then acc
-                                            else ((Excel.to_cell_name r i) :: acc)))
+    let cells = Array.(foldi mask.(0) ~init:[]
+                             ~f:(fun i acc _ -> if (i = c) || (config.top_left_only && i > c) then acc
+                                                else ((Excel.to_cell_name r i) :: acc)))
       in "=" ^ (Expr.to_string (Array.of_list_rev cells) e)
    in match row_mask with
       | None -> (function None -> ()
-                        | Some res -> List.(
-                            iter (range 0 rlen)
-                                 ~f:(fun r -> mask.(r).(c) <- col_formula r res)))
+                        | Some res -> Array.iteri mask ~f:(fun r _ -> mask.(r).(c) <- col_formula r res))
       | Some rm -> (function None -> ()
-                           | Some res -> List.(
-                               iter (range 0 rlen)
-                                    ~f:(fun r -> if rm.(r) then mask.(r).(c) <- col_formula r res)))
+                           | Some res -> Array.iteri mask ~f:(fun r _ -> if rm.(r) then mask.(r).(c) <- col_formula r res))
 
 let apply_range_formula ~(config : Config.t) ~(mask : string matrix)
                         (r : int) (c : int) : (Expr.t option -> unit) =

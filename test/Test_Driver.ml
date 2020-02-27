@@ -5,9 +5,9 @@ open ExcelSynth
 open Driver
 open Utils
 
-let test_matrix =
-  Array.iteri2_exn ~f:(fun i -> Alcotest.(check (array string)
-                                                ("@ Row " ^ (Int.to_string (i + 1)))))
+let test_matrix m1 m2 =
+  Array.iteri m1 ~f:(fun i x1 -> Alcotest.(check (array string)
+                                                ("@ Row " ^ (Int.to_string (i + 1)))) x1 m2.(i))
 
 let pointwise_col_test () =
   let config = {
@@ -15,6 +15,7 @@ let pointwise_col_test () =
     last_row_aggregate = false
   } in
   let result = run ~config {
+    constants = [] ;
     data = Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
       [|   1. ;  10. ;   9.5 ;  11. |] ;
       [|  23. ;  12. ;   0.5 ;  35. |] ;
@@ -24,7 +25,7 @@ let pointwise_col_test () =
       [|  11. ;  -2. ;  -7.5 ;   9. |] ;
       [|  92. ;   0. ;  -46. ;  92. |] ;
     |] ;
-    constants = []
+    mask = None ;
   }
   and expected = [|
     [|              "" ;              "" ; "=(B1-(A1/(1.+1.)))" ; "=(A1+B1)" |] ;
@@ -43,6 +44,7 @@ let pointwise_row_col_test () =
     last_row_aggregate = false
   } in
   let result = run ~config {
+    constants = [] ;
     data = Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
       [|  1. ; 10. ;  0. ; 11. |] ;
       [| 23. ; 12. ;  7. ; 35. |] ;
@@ -52,7 +54,7 @@ let pointwise_row_col_test () =
       [| 11. ; -2. ; 33. ;  9. |] ;
       [| 92. ;  0. ; 43. ; 92. |] ;
     |] ;
-    constants = []
+    mask = None ;
   }
   and expected = [|
     [|              "" ;              "" ;              "" ; "=(A1+B1)" |] ;
@@ -66,6 +68,7 @@ let pointwise_row_col_test () =
 
 let last_row_aggregate_test () =
   let result = run {
+    constants = [] ;
     data = Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
       [|   1. ;  10. ;   9.5 ;  24. |] ;
       [|  23. ;  12. ;   0.5 ;  35. |] ;
@@ -75,7 +78,7 @@ let last_row_aggregate_test () =
       [|  11. ;  -2. ;  -7.5 ;   9. |] ;
       [| 115. ;  14. ; -43.5 ;  23. |] ;
     |] ;
-    constants = []
+    mask = None ;
   }
   and expected = [|
     [|            "" ;                      "" ; "=(B1-(A1/(1.+1.)))" ;                "" |] ;

@@ -1,5 +1,3 @@
-let indented_sep (indent : int) = "\n" ^ (String.make (45 + indent) ' ')
-
 [%%import "config.h"]
 
 [%%if LOGGING = 0]

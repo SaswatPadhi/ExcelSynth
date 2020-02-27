@@ -7,32 +7,13 @@ module List = struct
 
   let to_string_map ~(sep : string) (l : 'a list) ~(f : 'a -> string) : string =
     String.concat ~sep (List.map l ~f)
-
-  let to_string_mapi ~(sep : string) (l : 'a list) ~(f : int -> 'a -> string) : string =
-    String.concat ~sep (mapi ~f l)
-
-  let to_string_map2 ~(sep : string) (l1 : 'a list) (l2 : 'b list)
-                     ~(f : 'a -> 'b -> string) : string =
-    String.concat ~sep (map2_exn ~f l1 l2)
-
-  let range_map ?(stride = 1) ?(start = `inclusive) ?(stop = `exclusive)
-                ~(f : int -> 'a) (start_i : int) (stop_i : int) : 'a list =
-    map ~f (range ~stride ~start ~stop start_i stop_i)
 end
 
 module Array = struct
   include Array
 
-  let iteri2_exn (a1 : 'a array) (a2 : 'b array) ~(f : int -> 'a -> 'b -> unit) : unit =
-    if length a1 <> length a2 then invalid_arg "Array.iter2_exn";
-    iteri a1 ~f:(fun i x1 -> f i x1 a2.(i))
-
   let to_string_map ~(sep : string) (l : 'a array) ~(f : 'a -> string) : string =
     String.concat_array ~sep (map l ~f)
-
-  let to_string_map2 ~(sep : string) (l1 : 'a array) (l2 : 'b array)
-                     ~(f : 'a -> 'b -> string) : string =
-    String.concat_array ~sep (map2_exn l1 l2 ~f)
 end
 
 module Excel = struct
