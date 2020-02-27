@@ -30,8 +30,9 @@ end
 type 'a matrix = 'a array array
 
 type task = {
+  constants : Value.t list ;
   data : Value.t matrix ;
-  constants : Value.t list
+  mask : string matrix option ;
 }
 
 let make_pointwise_row_problem ~(config : Config.t) ~(col_mask : bool array option)
@@ -205,11 +206,16 @@ let run ?(config = Config.default) (task : task) : string matrix =
                          ~f:(fun acc a -> if acc = length a then acc else -1))
    in if cols < 0 then raise (Exceptions.Internal_Exn "Not a matrix!")
       else begin
-        let rlen = Array.length task.data and clen = Array.length task.data.(0) in
-        let mask = Array.init rlen ~f:(fun _ -> Array.init clen ~f:(fun _ -> "")) in
         let make_pointwise_row_problem = make_pointwise_row_problem ~config task
         and make_pointwise_col_problem = make_pointwise_col_problem ~config task
         and make_range_problem = make_range_problem ~config task in
+        let rlen = Array.length task.data and clen = Array.length task.data.(0) in
+        let mask =
+          match task.mask with
+          | None -> Array.init rlen ~f:(fun _ -> Array.init clen ~f:(fun _ -> ""))
+          | Some mask -> if Array.((length mask) = rlen && (for_all mask ~f:(fun re -> (length re) = clen))) then mask
+                         else raise (Invalid_argument "Provided 'mask' dimensions do not match 'data' dimensions!")
+         in
         let apply_row_formula = apply_row_formula ~config ~mask
         and apply_col_formula = apply_col_formula ~config ~mask
         and apply_range_formula = apply_range_formula ~config ~mask in

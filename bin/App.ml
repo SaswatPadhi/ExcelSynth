@@ -55,15 +55,21 @@ let command =
   Command.basic
     ~summary: "Synthesize Excel formulas for a CSV file."
     [%map_open
-      let log_path = flag "log-path" (optional string)
-                     ~doc:"FILENAME enable logging and output to the specified path"
-      and config   = config_flags
-      and csv_path = anon ("filename" %: string)
+      let constants = flag "constants" (listed string)
+                      ~doc:"FLOAT additional Boolean/numeric/string constants"
+      and log_path  = flag "log-path" (optional string)
+                      ~doc:"FILENAME enable logging and output to the specified path"
+      and mask_path = flag "mask-path" (optional string)
+                      ~doc:"FILENAME a known formula mask for the CSV file"
+      and config    = config_flags
+      and csv_path  = anon ("filename" %: string)
       in fun () ->
            Log.enable ~msg:"ExcelSynth" log_path ;
+           let constants = List.map constants ~f:Value.of_string in
            let csv = Csv.load ~fix:false csv_path in
            let data = Array.(of_list_map csv ~f:(of_list_map ~f:Value.of_string)) in
-           let res = Driver.run ~config { data ; constants = [] }
+           let mask = Option.map mask_path ~f:(fun p -> Csv.(to_array (load p))) in
+           let res = Driver.run ~config { constants ; data ; mask }
             in Csv.(print (of_array res))
     ]
 
