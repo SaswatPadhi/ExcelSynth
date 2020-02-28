@@ -27,14 +27,14 @@ module Config = struct
   }
 end
 
-type task = {
+type 'a task = {
   constants : Value.t list ;
-  data : Value.t Matrix.Offsetted.t ;
+  data : 'a Matrix.Offsetted.t ;
   mask : string Matrix.t option ;
 }
 
 let make_pointwise_row_problem ~(config : Config.t) ~(col_mask : bool array option)
-                               (task : task) (r : int) : Synthesizer.task =
+                               (task : Value.t task) (r : int) : Synthesizer.task =
   let constants = task.constants
    in match col_mask with
   | None -> {
@@ -55,7 +55,7 @@ let make_pointwise_row_problem ~(config : Config.t) ~(col_mask : bool array opti
     }
 
 let make_pointwise_col_problem ~(config : Config.t) ~(row_mask : bool array option)
-                               (task : task) (c : int) : Synthesizer.task =
+                               (task : Value.t task) (c : int) : Synthesizer.task =
   let constants = task.constants
    in match row_mask with
       | None -> {
@@ -75,7 +75,7 @@ let make_pointwise_col_problem ~(config : Config.t) ~(row_mask : bool array opti
           outputs = Array.filter_mapi ~~(task.data) ~f:(fun i a -> if rm.(i) then Some a.(c) else None) ;
         }
 
-let make_range_problem ~(config : Config.t) (task : task) (r : int) (c : int) : Synthesizer.task =
+let make_range_problem ~(config : Config.t) (task : Value.t task) (r : int) (c : int) : Synthesizer.task =
   let constants = task.constants and outputs = [| ~~(task.data).(r).(c) |]
    in if config.top_left_only
       then {
@@ -194,7 +194,7 @@ let apply_range_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t)
    in function None -> ()
              | Some res -> ~~mask.(r).(c) <- range_formula res.expr
 
-let run ?(config = Config.default) (task : task) : string Matrix.t =
+let run_on_values ?(config = Config.default) (task : Value.t task) : string Matrix.t =
   let cols = Array.(fold !!(task.data) ~init:(length !!(task.data).(0))
                          ~f:(fun acc a -> if acc = length a then acc else -1))
    in if cols < 0 then raise (Invalid_argument "Not a matrix!")
@@ -208,7 +208,8 @@ let run ?(config = Config.default) (task : task) : string Matrix.t =
           | None -> Matrix.Offsetted.(create (Array.map !!(task.data) ~f:(Array.map ~f:(fun _ -> "")))
                                              ~top_left:(Some (top_left task.data))
                                              ~bottom_right:(Some (bottom_right task.data)))
-          | Some mask -> if Array.((length mask) = rlen && (for_all mask ~f:(fun re -> (length re) = clen)))
+          | Some mask -> if Array.((length mask) = (length !!(task.data))
+                         && (for_all mask ~f:(fun re -> (length re) = (length !!(task.data).(0)))))
                          then Matrix.Offsetted.(create mask ~top_left:(Some (top_left task.data))
                                                             ~bottom_right:(Some (bottom_right task.data)))
                          else raise (Invalid_argument "Provided 'mask' dimensions do not match 'data' dimensions!")
@@ -248,4 +249,26 @@ let run ?(config = Config.default) (task : task) : string Matrix.t =
                                                in Lwt_preemptive.detach work ())
                                     (List.range 0 rlen)))
           ; Matrix.Offsetted.merge mask
+      end
+
+let run ?(config = Config.default) (task : string task) : string Matrix.t =
+  let cols = Array.(fold !!(task.data) ~init:(length !!(task.data).(0))
+                         ~f:(fun acc a -> if acc = length a then acc else -1))
+   in if cols < 0 then raise (Invalid_argument "Not a matrix!")
+      else begin
+        let rlen = Array.length !!(task.data) and clen = Array.length !!(task.data).(0) in
+        let ot , ol = Matrix.Offsetted.top_left task.data in
+        let mask : string Matrix.t =
+          match task.mask with
+          | None -> Array.map !!(task.data) ~f:(Array.map ~f:(fun _ -> "" ))
+          | Some mask -> if Array.((length mask) = rlen && (for_all mask ~f:(fun re -> (length re) = clen)))
+                         then mask
+                         else raise (Invalid_argument "Provided 'mask' dimensions do not match 'data' dimensions!")
+         in Array.(iteri ~~(task.data) ~f:(fun i -> iteri ~f:(fun j s -> if String.is_empty s
+                                                                         then mask.(ot+i).(ol+j) <- "<empty>" )))
+          ; let data = Matrix.Offsetted.(create (Array.(map !!(task.data) ~f:(map ~f:Value.of_string)))
+                                                ~top_left:(Some (top_left task.data))
+                                                ~bottom_right:(Some (bottom_right task.data)))
+             in let mask = run_on_values ~config { task with data ; mask = (Some mask) }
+                 in Array.(map mask ~f:(map ~f:(fun s -> if String.equal s "<empty>" then "" else s)))
       end

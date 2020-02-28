@@ -74,7 +74,7 @@ let command =
            Log.enable ~msg:"ExcelSynth" log_path ;
            let constants = List.map constants ~f:Value.of_string in
            let csv = Csv.load ~fix:false csv_path in
-           let data = Array.(of_list_map csv ~f:(of_list_map ~f:Value.of_string)) in
+           let data = Array.(of_list_map csv ~f:(of_list_map ~f:(String.strip))) in
            let mask = Option.map mask_path ~f:(fun p -> Csv.(to_array (load p))) in
            let data = Matrix.Offsetted.(
              match range with None -> create data

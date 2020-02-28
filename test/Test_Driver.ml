@@ -14,7 +14,7 @@ let pointwise_col_test () =
     Config.default with
     last_row_aggregate = false
   } in
-  let result = run ~config {
+  let result = run_on_values ~config {
     constants = [] ;
     data = Matrix.Offsetted.create (Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
       [|   1. ;  10. ;   9.5 ;  11. |] ;
@@ -43,7 +43,7 @@ let pointwise_row_col_test () =
     row_pointwise = true ;
     last_row_aggregate = false
   } in
-  let result = run ~config {
+  let result = run_on_values ~config {
     constants = [] ;
     data = Matrix.Offsetted.create (Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
       [|  1. ; 10. ;  0. ; 11. |] ;
@@ -67,7 +67,7 @@ let pointwise_row_col_test () =
   |] in test_matrix expected result
 
 let last_row_aggregate_test () =
-  let result = run {
+  let result = run_on_values {
     constants = [] ;
     data = Matrix.Offsetted.create (Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
       [|   1. ;  10. ;   9.5 ;  24. |] ;
@@ -91,7 +91,7 @@ let last_row_aggregate_test () =
   |] in test_matrix expected result
 
 let headings_test () =
-  let result = run {
+  let result = run_on_values {
     constants = [] ;
     data = Matrix.Offsetted.create (Value.[|
       [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" |] ;
@@ -119,7 +119,7 @@ let headings_test () =
   |] in test_matrix expected result
 
 let range_bound_test () =
-  let result = run {
+  let result = run_on_values {
     constants = [] ;
     data = Matrix.Offsetted.create ~top_left:(Some (1,1)) ~bottom_right:(Some (8,4)) (Value.[|
       [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" |] ;
