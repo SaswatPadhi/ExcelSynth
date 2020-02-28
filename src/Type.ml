@@ -5,6 +5,7 @@ open Exceptions
 module T = struct
   type t = BOOL
          | ERROR
+         | MERGED
          | NUM
          | STRING
          | RANGE

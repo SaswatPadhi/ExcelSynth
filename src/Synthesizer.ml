@@ -244,11 +244,13 @@ let solve ?(config = Config.default) (task : task) : Expr.synthesized =
               ~f:(fun i input -> Log.debug (lazy ("    + v" ^ (Int.to_string i) ^ ": [ " ^
                                                   (Array.to_string_map input ~sep:" ; " ~f:Value.to_string) ^ " ]")))) ;
   try solve_impl config task
-    ; Log.debug (lazy ("  % NO SOLUTION FOUND!"))
+    ; Log.debug (lazy ("  # NO SOLUTION FOUND!"))
     ; raise NoSuchFunction
-  with NoMajorityType -> raise NoSuchFunction
+  with NoMajorityType
+       -> Log.debug (lazy ("  # NO MAJORITY I/O TYPE FOUND, ABORTING!"))
+        ; raise NoSuchFunction
      | Success candidate
-       -> Log.debug (lazy ("  % Solution (@ size " ^ (Int.to_string (Expr.size candidate.expr)) ^ "):"))
+       -> Log.debug (lazy ("  $ Solution (@ size " ^ (Int.to_string (Expr.size candidate.expr)) ^ "):"))
         ; Log.debug (lazy ("    " ^ (Expr.to_string (Array.of_list_mapi task.inputs ~f:(fun i _ -> "v" ^ (Int.to_string i)))
                                                     candidate.expr)))
         ; candidate

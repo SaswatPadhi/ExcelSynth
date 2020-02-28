@@ -17,27 +17,39 @@ module Array = struct
 end
 
 module Excel = struct
-  let rec to_col_name c =
-    let q = c / 26
-    in if q > 0 then (to_col_name (q - 1)) ^ Char.(to_string (of_int_exn ((c % 26) + 65)))
-                else Char.(to_string (of_int_exn (c + 65)))
+  module Column = struct
+    let rec of_int c =
+      let q = c / 26
+      in if q > 0 then (of_int (q - 1)) ^ Char.(to_string (of_int_exn ((c % 26) + 65)))
+                  else Char.(to_string (of_int_exn (c + 65)))
 
-  let rec of_col_name col =
-    (String.fold col ~init:0 ~f:(fun acc c -> 26*acc + (Char.to_int c) - 64)) - 1
+    let rec to_int col =
+      (String.fold col ~init:0 ~f:(fun acc c -> 26*acc + (Char.to_int c) - 64)) - 1
+  end
 
-  let to_cell_name r c = (to_col_name c) ^ (Int.to_string (r + 1))
+  module Cell = struct
+    let of_rc_ints r c = (Column.of_int c) ^ (Int.to_string (r + 1))
 
-  let of_cell_name cell =
-    let col = String.take_while cell ~f:Char.is_alpha in
-    let row = String.(drop_prefix cell (length col))
-     in ((Int.of_string row)-1, of_col_name col)
+    let to_rc_ints cell =
+      let col = String.take_while cell ~f:Char.is_alpha in
+      let row = String.(drop_prefix cell (length col))
+      in ((Int.of_string row)-1, Column.to_int col)
+  end
 
-  let offset_range range t l b r =
-    let [@warning "-8"] [tl ; br] = String.split ~on:':' range in
-    let tl = of_cell_name tl and br = of_cell_name br in
-    let t = (fst tl) + t and l = (snd tl) + l
-    and b = (fst br) + b and r = (snd br) + r
-     in if t < 0 || l < 0 || b < t || r < l
-        then raise (Invalid_argument "Bad offset!")
-        else ((to_cell_name t l) ^ ":" ^ (to_cell_name b r))
+  module Range = struct
+    let of_rc_ints r1 c1 r2 c2 =
+      (Cell.of_rc_ints r1 c1) ^ ":" ^ (Cell.of_rc_ints r2 c2)
+
+    let to_rc_ints r =
+      let [@warning "-8"] [tl ; br] = String.split ~on:':' r
+       in (Cell.to_rc_ints tl , Cell.to_rc_ints br)
+
+    let offset range t l b r =
+      let tl , br = to_rc_ints range in
+      let t = (fst tl) + t and l = (snd tl) + l
+      and b = (fst br) + b and r = (snd br) + r
+      in if t < 0 || l < 0 || b < t || r < l
+          then raise (Invalid_argument "Bad offset!")
+          else of_rc_ints t l b r
+  end
 end

@@ -16,7 +16,7 @@ let pointwise_col_test () =
   } in
   let result = run ~config {
     constants = [] ;
-    data = Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
+    data = Matrix.Offsetted.create (Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
       [|   1. ;  10. ;   9.5 ;  11. |] ;
       [|  23. ;  12. ;   0.5 ;  35. |] ;
       [|  22. ;   2. ;   -9. ;  24. |] ;
@@ -24,7 +24,7 @@ let pointwise_col_test () =
       [|  59. ;   0. ; -29.5 ;  59. |] ;
       [|  11. ;  -2. ;  -7.5 ;   9. |] ;
       [|  92. ;   0. ;  -46. ;  92. |] ;
-    |] ;
+    |]) ;
     mask = None ;
   }
   and expected = [|
@@ -45,7 +45,7 @@ let pointwise_row_col_test () =
   } in
   let result = run ~config {
     constants = [] ;
-    data = Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
+    data = Matrix.Offsetted.create (Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
       [|  1. ; 10. ;  0. ; 11. |] ;
       [| 23. ; 12. ;  7. ; 35. |] ;
       [| 22. ;  2. ;  7. ; 24. |] ;
@@ -53,7 +53,7 @@ let pointwise_row_col_test () =
       [| 59. ;  0. ;  3. ; 59. |] ;
       [| 11. ; -2. ; 33. ;  9. |] ;
       [| 92. ;  0. ; 43. ; 92. |] ;
-    |] ;
+    |]) ;
     mask = None ;
   }
   and expected = [|
@@ -69,7 +69,7 @@ let pointwise_row_col_test () =
 let last_row_aggregate_test () =
   let result = run {
     constants = [] ;
-    data = Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
+    data = Matrix.Offsetted.create (Array.(map ~f:(map ~f:(fun i -> Value.Num i))) [|
       [|   1. ;  10. ;   9.5 ;  24. |] ;
       [|  23. ;  12. ;   0.5 ;  35. |] ;
       [|  22. ;   2. ;   -9. ;  24. |] ;
@@ -77,7 +77,7 @@ let last_row_aggregate_test () =
       [|  59. ;   0. ; -29.5 ;  41. |] ;
       [|  11. ;  -2. ;  -7.5 ;   9. |] ;
       [| 115. ;  14. ; -43.5 ;  23. |] ;
-    |] ;
+    |]) ;
     mask = None ;
   }
   and expected = [|
@@ -90,8 +90,66 @@ let last_row_aggregate_test () =
     [| "=SUM(A1:A6)" ; "=(SUM(B1:B6)/(1.+1.))" ; "=(B7-(A7/(1.+1.)))" ; "=AVERAGE(D1:D6)" |] ;
   |] in test_matrix expected result
 
+let headings_test () =
+  let result = run {
+    constants = [] ;
+    data = Matrix.Offsetted.create (Value.[|
+      [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" |] ;
+      [| String "Row 1"   ; Num 1.         ; Num 10.        ; Num 9.5        ; Num 24.        |] ;
+      [| String "Row 2"   ; Num 23.        ; Num 12.        ; Num 0.5        ; Num 35.        |] ;
+      [| String "Row 3"   ; Num 22.        ; Num 2.         ; Num (-9.)      ; Num 23.        |] ;
+      [| String "Row 4"   ; Num (-1.)      ; Num 6.         ; Num 6.5        ; Num 5.         |] ;
+      [| String "Row 5"   ; Num 59.        ; Num 0.         ; Num (-29.5)    ; Num 40.        |] ;
+      [| String "Row 6"   ; Num 11.        ; Num (-2.)      ; Num (-7.5)     ; Num 9.         |] ;
+      [| String "Row 7"   ; Num 0.         ; Num 44.        ; Num 44.        ; Num 18.        |] ;
+      [| String "Row 9"   ; Num 115.       ; Num 36.        ; Num (-21.5)    ; Num 22.        |] ;
+    |]) ;
+    mask = None ;
+  }
+  and expected = [|
+    [| "" ;            "" ;                      "" ;                   "" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C2-(B2/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C3-(B3/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C4-(B4/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C5-(B5/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C6-(B6/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C7-(B7/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C8-(B8/(1.+1.)))" ;                "" |] ;
+    [| "" ; "=SUM(B2:B8)" ; "=(SUM(C2:C8)/(1.+1.))" ; "=(C9-(B9/(1.+1.)))" ; "=AVERAGE(E2:E8)" |] ;
+  |] in test_matrix expected result
+
+let range_bound_test () =
+  let result = run {
+    constants = [] ;
+    data = Matrix.Offsetted.create ~top_left:(Some (1,1)) ~bottom_right:(Some (8,4)) (Value.[|
+      [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" |] ;
+      [| String "Row 1"   ; Num 1.         ; Num 10.        ; Num 9.5        ; Num 24.        |] ;
+      [| String "Row 2"   ; Num 23.        ; Num 12.        ; Num 0.5        ; Num 35.        |] ;
+      [| String "Row 3"   ; Num 22.        ; Num 2.         ; Num (-9.)      ; Num 23.        |] ;
+      [| String "Row 4"   ; Num (-1.)      ; Num 6.         ; Num 6.5        ; Num 5.         |] ;
+      [| String "Row 5"   ; Num 59.        ; Num 0.         ; Num (-29.5)    ; Num 40.        |] ;
+      [| String "Row 6"   ; Num 11.        ; Num (-2.)      ; Num (-7.5)     ; Num 9.         |] ;
+      [| String "Row 7"   ; Num 0.         ; Num 44.        ; Num 44.        ; Num 18.        |] ;
+      [| String "Row 9"   ; Num 115.       ; Num 36.        ; Num (-21.5)    ; Num 22.        |] ;
+    |]) ;
+    mask = None ;
+  }
+  and expected = [|
+    [| "" ;            "" ;                      "" ;                   "" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C2-(B2/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C3-(B3/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C4-(B4/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C5-(B5/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C6-(B6/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C7-(B7/(1.+1.)))" ;                "" |] ;
+    [| "" ;            "" ;                      "" ; "=(C8-(B8/(1.+1.)))" ;                "" |] ;
+    [| "" ; "=SUM(B2:B8)" ; "=(SUM(C2:C8)/(1.+1.))" ; "=(C9-(B9/(1.+1.)))" ; "=AVERAGE(E2:E8)" |] ;
+  |] in test_matrix expected result
+
 let all = [
   "Point-wise column operations",         `Quick, pointwise_col_test ;
   "Point-wise row and column operations", `Quick, pointwise_row_col_test ;
   "Last row aggregation operations",      `Quick, last_row_aggregate_test ;
+  "Noisy data: row and column headings",  `Quick, headings_test ;
+  "Synthesis restricted to a range",      `Quick, range_bound_test ;
 ]
