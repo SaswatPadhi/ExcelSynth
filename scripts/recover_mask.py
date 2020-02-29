@@ -44,14 +44,16 @@ if __name__ == "__main__":
     logging.info('')
     _, tmp_r_path = mkstemp()
     _, tmp_w_path = mkstemp()
+    total = len(todo)
 
     try:
         logging.info(f'Starting recovery with. TEMP_R_FILE = "{tmp_r_path}" TEMP_W_FILE = "{tmp_w_path}"')
         logging.info('')
 
-        for e_csv_path, data in todo.items():
+        for t, (e_csv_path, data) in enumerate(todo.items()):
             fm_out_path = args.output_dir.joinpath(e_csv_path.name)
-            logging.info(f'@ "{e_csv_path.name}"  >  "{fm_out_path}"')
+            logging.info(f'@ {t+1:03} / {total:03} : "{e_csv_path.name}"')
+            logging.info(f' `-- Writing to "{fm_out_path}"')
             for i, table in enumerate(data):
                 logging.info(f' `-- Inspecting range [{table}] ...')
                 try:
