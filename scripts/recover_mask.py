@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
         for e_csv_path, data in todo.items():
             fm_out_path = args.output_dir.joinpath(e_csv_path.name)
-            logging.info(f'@ "{e_csv_path.name}"')
+            logging.info(f'@ "{e_csv_path.name}"  >  "{fm_out_path}"')
             for i, table in enumerate(data):
                 logging.info(f' `-- Inspecting range [{table}] ...')
                 try:
@@ -73,6 +73,7 @@ if __name__ == "__main__":
                 except Exception as e:
                     logging.error(f'      `-- Failed to recover the formula mask!')
                     logging.exception(e)
+            logging.info('')
     finally:
         Path(tmp_r_path).unlink()
         Path(tmp_w_path).unlink()

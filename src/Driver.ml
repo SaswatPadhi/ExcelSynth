@@ -225,26 +225,34 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
         with Exceptions.NoSuchFunction -> None
        in
           Lwt_preemptive.(simple_init () ; set_bounds (0, config.max_threads) ; set_max_number_of_threads_queued 1024)
-        ; (if config.last_row_aggregate && rlen > 2
-           then Lwt_main.run (
-                  Lwt_list.iter_p (fun c -> if String.is_empty !>mask.(rlen-1).(c)
-                                            then let work () = apply_range_formula (rlen-1) c (solver (make_range_problem (rlen-1) c))
-                                                  in Lwt_preemptive.detach work ()
-                                            else Lwt.return ())
-                                  (List.range 0 clen)))
+        ; (if config.last_row_aggregate && rlen > 3
+           then (match Array.(findi !>(task.data) ~f:(fun r _ -> exists !>(task.data).(rlen-r-1) ~f:(fun c -> Type.(equal NUM (Value.typeof c))))) with
+                 | Some (r, _) when rlen - r > 4
+                   -> let last_row = rlen - r - 1
+                       in Lwt_main.run (
+                            Lwt_list.iter_p (fun c -> if String.is_empty !>mask.(last_row).(c)
+                                                      then let work () = apply_range_formula last_row c (solver (make_range_problem last_row c))
+                                                            in Lwt_preemptive.detach work ()
+                                                       else Lwt.return ())
+                                            (List.range 0 clen))
+                 | _ -> ()))
         ; (if config.col_pointwise
            then Lwt_main.run (
                   Lwt_list.iter_p (fun c -> let row_mask = Some (Array.map !>mask ~f:(fun row -> String.is_empty row.(c))) in
                                             let work () = apply_col_formula ~row_mask c (solver (make_pointwise_col_problem ~row_mask c))
                                              in Lwt_preemptive.detach work ())
                                   (List.range 0 clen)))
-        ; (if config.last_col_aggregate && clen > 2
-           then Lwt_main.run (
-                  Lwt_list.iter_p (fun r -> if String.is_empty !>mask.(r).(clen-1)
-                                            then let work () = apply_range_formula r (clen-1) (solver (make_range_problem r (clen-1)))
-                                                  in Lwt_preemptive.detach work ()
-                                            else Lwt.return ())
-                                  (List.range 0 rlen)))
+        ; (if config.last_col_aggregate && clen > 3
+           then (match Array.(findi !>(task.data).(0) ~f:(fun c _ -> exists !>(task.data) ~f:(fun r -> Type.(equal NUM (Value.typeof r.(clen-c-1)))))) with
+                 | Some (c, _) when clen - c > 4
+                   -> let last_col = clen - c - 1
+                       in Lwt_main.run (
+                            Lwt_list.iter_p (fun r -> if String.is_empty !>mask.(r).(last_col)
+                                                      then let work () = apply_range_formula r last_col (solver (make_range_problem r last_col))
+                                                            in Lwt_preemptive.detach work ()
+                                                      else Lwt.return ())
+                                            (List.range 0 rlen))
+                 | _ -> ()))
         ; (if config.row_pointwise
            then Lwt_main.run (
                   Lwt_list.iter_p (fun r -> let col_mask = Some (Array.map !>mask.(r) ~f:String.is_empty) in

@@ -8,10 +8,12 @@ module Offsetted = struct
   end
 
   let create ?(top_left = None) ?(bottom_right = None) (mat : 'a t) : 'a T.t =
-    let r1,c1 = match top_left with None -> 0,0
-                    | Some (r1,c1) -> (r1,c1)
-    and r2,c2 = match bottom_right with None -> Array.((length mat) - 1, (length mat.(0)) - 1)
-                    | Some (r2,c2) -> (r2,c2)
+    let r1,c1 = match top_left with
+                | None -> 0,0
+                | Some (r1,c1) -> (r1,c1)
+    and r2,c2 = match bottom_right with
+                | None -> Array.((length mat) - 1, (length mat.(0)) - 1)
+                | Some (r2,c2) -> (r2,c2)
      in
     let submat = Array.(filter_mapi mat ~f:(fun i row -> if not (r1 <= i && i <= r2) then None
                                                          else Some (filteri row ~f:(fun j _ -> c1 <= j && j <= c2))))
