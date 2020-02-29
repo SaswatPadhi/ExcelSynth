@@ -2,6 +2,20 @@ open Core
 
 open Exceptions
 
+module Float = struct
+  include Float
+
+  let eps = Array.of_list_map (List.range 0 16) (fun i -> int_pow 10. Int.(-i))
+
+  let equal ?(eps_digits = 8) x y =
+    abs (x -. y) < eps.(eps_digits)
+
+  let compare ?(eps_digits = 8) x y =
+    if equal x y then 0
+    else if x -. y > eps.(eps_digits) then 1
+    else -1
+end
+
 module List = struct
   include List
 

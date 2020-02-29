@@ -65,9 +65,10 @@ let apply ?(type_error_threshold = 0.0) (comp : component) (args : synthesized l
                 else begin
                   let expr = Application (comp, subexprs)
                    in Log.debug (lazy ("    @ error rate " ^ Float.(to_string type_error_rate) ^ ":"))
-                    ; Log.debug (lazy ("      " ^ (to_string (Array.of_list_map (List.range 0 1024)
+                    ; Log.debug (lazy ("    + " ^ (to_string (Array.of_list_map (List.range 0 1024)
                                                                                 ~f:(fun i -> "v" ^ (Int.to_string i)))
                                                              expr)))
+                    ; Log.debug (lazy ("     `-- [| " ^ Array.(to_string_map outputs ~sep:" ; " ~f:Value.to_string) ^ " |]"))
                     ; Some { expr ; outputs }
                 end
       with Internal_Exn _ as e -> raise e

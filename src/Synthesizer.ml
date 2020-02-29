@@ -144,8 +144,8 @@ let solve_impl (config : Config.t) (task : task) =
   let add_candidate candidates_set level cost (candidate : Expr.synthesized) =
     let old_size = Set.length !seen_outputs
      in seen_outputs := Set.add !seen_outputs candidate.outputs
-      ; if (Set.length !seen_outputs) = old_size then false
-        else (ignore (DList.insert_last candidates_set.(level).(cost) candidate) ; true)
+      ; if (Set.length !seen_outputs) <> old_size
+        then ignore (DList.insert_last candidates_set.(level).(cost) candidate)
    in
 
   let constants = Value.(
@@ -156,17 +156,20 @@ let solve_impl (config : Config.t) (task : task) =
     let candidate : Expr.synthesized = {
       expr = Expr.Constant value;
       outputs = Array.create ~len:(Array.length task.outputs) value;
-    } in ignore (add_candidate (typed_candidates (Value.typeof value)) 0 1 candidate)
+    } in add_candidate (typed_candidates (Value.typeof value)) 0 1 candidate
    in
 
   List.(iter (rev constants) ~f:add_constant_candidate) ;
 
   List.iteri task.inputs
-             ~f:(fun i input -> ignore (add_candidate (typed_candidates (Value.majority_type input)) 0 1
-                                                      { expr = Expr.Variable i ; outputs = input }))
+             ~f:(fun i input -> try add_candidate (typed_candidates (Value.majority_type input)) 0 1
+                                                  { expr = Expr.Variable i ; outputs = input }
+                                with NoMajorityType -> Log.debug (lazy ("     `-- Ignoring input v"
+                                                                       ^ (Int.to_string i)
+                                                                       ^ ": No majority type found!")))
   ;
 
-  let value_equal_approx = Value.(fun v1 v2 -> v2 = Error || equal v1 v2) in
+  let value_equal_approx = Value.(fun v1 v2 -> equal v2 Error || equal v1 v2) in
   let check (candidate : Expr.synthesized) =
     if not (config.disable_constant_solutions && Expr.is_constant candidate.expr)
     then if Array.equal value_equal_approx task.outputs candidate.outputs
@@ -195,9 +198,8 @@ let solve_impl (config : Config.t) (task : task) =
       | None -> ()
       | Some result
         -> let expr_cost = f_cost result.expr
-            in (if expr_cost < config.cost_limit
-                then (if Type.equal task_codomain component.codomain then check result))
-             ; ignore (add_candidate candidates expr_level expr_cost result)
+            in (if expr_cost < config.cost_limit && Type.equal task_codomain component.codomain then check result)
+             ; add_candidate candidates expr_level expr_cost result
      in apply_component op_level expr_level cost component.domain applier
    in
   let ordered_level_cost =
@@ -247,7 +249,7 @@ let solve ?(config = Config.default) (task : task) : Expr.synthesized =
     ; Log.debug (lazy ("  # NO SOLUTION FOUND!"))
     ; raise NoSuchFunction
   with NoMajorityType
-       -> Log.debug (lazy ("  # NO MAJORITY I/O TYPE FOUND, ABORTING!"))
+       -> Log.debug (lazy ("  # NO MAJORITY OUTPUT TYPE FOUND, ABORTING!"))
         ; raise NoSuchFunction
      | Success candidate
        -> Log.debug (lazy ("  $ Solution (@ size " ^ (Int.to_string (Expr.size candidate.expr)) ^ "):"))

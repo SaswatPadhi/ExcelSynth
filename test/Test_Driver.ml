@@ -93,7 +93,7 @@ let last_row_aggregate_test () =
 let headings_test () =
   let result = run_on_values {
     constants = [] ;
-    data = Matrix.Offsetted.create (Value.[|
+    data = Matrix.Offsetted.create Value.[|
       [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" |] ;
       [| String "Row 1"   ; Num 1.         ; Num 10.        ; Num 9.5        ; Num 24.        |] ;
       [| String "Row 2"   ; Num 23.        ; Num 12.        ; Num 0.5        ; Num 35.        |] ;
@@ -103,7 +103,7 @@ let headings_test () =
       [| String "Row 6"   ; Num 11.        ; Num (-2.)      ; Num (-7.5)     ; Num 9.         |] ;
       [| String "Row 7"   ; Num 0.         ; Num 44.        ; Num 44.        ; Num 18.        |] ;
       [| String "Row 9"   ; Num 115.       ; Num 36.        ; Num (-21.5)    ; Num 22.        |] ;
-    |]) ;
+    |] ;
     mask = None ;
   }
   and expected = [|
@@ -121,7 +121,7 @@ let headings_test () =
 let range_bound_test () =
   let result = run_on_values {
     constants = [] ;
-    data = Matrix.Offsetted.create ~top_left:(Some (1,1)) ~bottom_right:(Some (8,4)) (Value.[|
+    data = Matrix.Offsetted.create ~top_left:(Some (1,1)) ~bottom_right:(Some (8,4)) Value.[|
       [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" |] ;
       [| String "Row 1"   ; Num 1.         ; Num 10.        ; Num 9.5        ; Num 24.        |] ;
       [| String "Row 2"   ; Num 23.        ; Num 12.        ; Num 0.5        ; Num 35.        |] ;
@@ -131,7 +131,7 @@ let range_bound_test () =
       [| String "Row 6"   ; Num 11.        ; Num (-2.)      ; Num (-7.5)     ; Num 9.         |] ;
       [| String "Row 7"   ; Num 0.         ; Num 44.        ; Num 44.        ; Num 18.        |] ;
       [| String "Row 9"   ; Num 115.       ; Num 36.        ; Num (-21.5)    ; Num 22.        |] ;
-    |]) ;
+    |] ;
     mask = None ;
   }
   and expected = [|

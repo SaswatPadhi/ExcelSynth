@@ -32,6 +32,6 @@ module Offsetted = struct
 end
 
 module Infix = struct
-  let ( ~~ ) (m : 'a Offsetted.t) = Offsetted.submatrix m [@@inline always]
+  let ( !> ) (m : 'a Offsetted.t) = Offsetted.submatrix m [@@inline always]
   let ( !! ) ((Offsetted (mat , _ , _, _)) : 'a Offsetted.t) = mat [@@inline always]
 end

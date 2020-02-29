@@ -1,8 +1,9 @@
 open Base
 
 open Expr
+open Utils
 
-let pos_div x y = (x - (Caml.Int.rem x y)) / y
+let quotient x y = (x - (Caml.Int.rem x y)) / y
 
 let equality = [
   {
@@ -150,11 +151,11 @@ let peano = polynomials @ [
                                  && (y =/= Constant (Num 0.)) && (y =/= Constant (Num 1.))
                        | _ -> false);
     evaluate = Value.(function [@warning "-8"]
-                      [Num x ; Num y] when Float.(y <> 0.)
+                      [Num x ; Num y] when not Float.(equal y 0.)
                       -> Num (x /. y));
     to_string = (fun [@warning "-8"] [a ; b] -> "(" ^ a ^ "/" ^ b ^ ")")
   } ;
-  {
+  (* {
     name = "num-quotient";
     codomain = Type.NUM;
     domain = Type.[NUM; NUM];
@@ -164,8 +165,8 @@ let peano = polynomials @ [
                                  && (y =/= Constant (Num 0.)) && (y =/= Constant (Num 1.))
                        | _ -> false);
     evaluate = Value.(function [@warning "-8"]
-                      [Num x ; Num y] when Float.(y <> 0.) && Caml.Float.((is_integer x) && (is_integer y))
-                      -> Num Float.(of_int (pos_div (to_int x) (to_int x))));
+                      [Num x ; Num y] when not Float.(equal y 0.) && Caml.Float.((is_integer x) && (is_integer y))
+                      -> Num Float.(of_int (quotient (to_int x) (to_int x))));
     to_string = (fun [@warning "-8"] [a ; b] -> "QUOTIENT(" ^ a ^ "," ^ b ^ ")")
   } ;
   {
@@ -178,10 +179,10 @@ let peano = polynomials @ [
                                  && (y =/= Constant (Num 0.)) && (y =/= Constant (Num 1.))
                        | _ -> false);
     evaluate = Value.(function [@warning "-8"]
-                      [Num x ; Num y] when Float.(y <> 0.) && Caml.Float.((is_integer x) && (is_integer y))
+                      [Num x ; Num y] when not Float.(equal y 0.) && Caml.Float.((is_integer x) && (is_integer y))
                       -> Num Float.(of_int (Caml.Int.rem (to_int x) (to_int y))));
     to_string = (fun [@warning "-8"] [a ; b] -> "MOD(" ^ a ^ "," ^ b ^ ")")
-  }
+  } *)
 ]
 
 let linear_levels = [| equality ; intervals ; octagons ; polyhedra |]

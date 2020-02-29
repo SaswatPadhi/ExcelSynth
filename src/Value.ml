@@ -14,7 +14,24 @@ module T = struct
 end
 
 include T
-include Comparable.Make (T)
+
+module Compare = Comparable.Make (T)
+
+let equal v1 v2 = match v1 , v2 with
+                  | Num f1, Num f2 -> Float.equal f1 f2
+                  | _ -> Compare.equal v1 v2
+[@@inline always]
+
+let compare v1 v2 = match v1 , v2 with
+                    | Num f1, Num f2 -> Float.compare f1 f2
+                    | _ -> Compare.compare v1 v2
+[@@inline always]
+
+let orig_equal = equal
+let equal v1 v2 = match v1 , v2 with
+                  | Num f1, Num f2 -> Float.equal f1 f2
+                  | _ -> orig_equal v1 v2
+[@@inline always]
 
 let rec typeof : t -> Type.t = Type.(function
                                      | Bool _   -> BOOL
@@ -37,12 +54,11 @@ let majority_type (a : t array) : Type.t =
     ; Type.(match Array.findi count ~f:(fun _ c -> Float.(c >= half_length_a)) with
             | Some (0, _) -> BOOL
             | Some (3, _) -> NUM
-            | Some (4, _) -> STRING
             | Some (5, _) -> RANGE
             | _ -> raise NoMajorityType)
 
 let rec to_string : t -> string = function
-  | Bool b       -> Bool.to_string b
+  | Bool b       -> String.uppercase (Bool.to_string b)
   | Error        -> "<error>"
   | Merged (x,y) -> "<m:" ^ (Excel.Cell.of_rc_ints x y) ^ ">"
   | Num n        -> Float.to_string n
@@ -55,14 +71,16 @@ let rec to_string : t -> string = function
                                       ^ "]"))
      ^ ">"
 
-let rec of_string (s : string) : t =
+let of_string (s : string) : t =
   try
     Num (Float.of_string s)
-  with Invalid_argument _ -> try
-    Bool (Bool.of_string s)
   with Invalid_argument _ -> try
     let x , y = Excel.Cell.to_rc_ints (String.chop_prefix_exn ~prefix:"<m:"
                                                               (String.chop_suffix_exn ~suffix:">" s))
      in Merged (x,y)
-  with Invalid_argument _ ->
-    if String.equal s "<error>" then Error else String s
+  with Invalid_argument _ -> String.(
+    if equal s "<error>" then Error
+    else if equal s "TRUE" then Bool true
+    else if equal s "FALSE" then Bool false
+    else String s
+  )
