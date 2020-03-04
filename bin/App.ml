@@ -13,8 +13,8 @@ let config_flags =
     and col_pointwise               = flag "check-pointwise-col-operations"
                                            (optional_with_default Driver.Config.default.col_pointwise bool)
                                            ~doc:"BOOLEAN synthesize pointwise transformations for columns"
-    and cost_limit                  = flag "maximum-expression-cost"
-                                           (optional_with_default Driver.Config.default._Synthesizer.cost_limit int)
+    and size_limit                  = flag "max-expr-size"
+                                           (optional_with_default Driver.Config.default._Synthesizer.size_limit int)
                                            ~doc:"INTEGER maximum cost (AST size) of expressions to explore"
     and disable_constant_solutions  = flag "disable-constant-solutions"
                                            (optional_with_default Driver.Config.default._Synthesizer.disable_constant_solutions bool)
@@ -48,7 +48,7 @@ let config_flags =
        top_left_only ;
        _Synthesizer = {
          Driver.Config.default._Synthesizer with
-         cost_limit ;
+         size_limit ;
          disable_constant_solutions ;
          type_error_threshold ;
        } ;

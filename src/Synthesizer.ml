@@ -18,7 +18,7 @@ let rec ( ++ ) = fun x y ->
 module Config = struct
   type t = {
     components_per_level : Expr.component list array ;
-    cost_limit : int ;
+    size_limit : int ;
     disable_constant_solutions : bool ;
     type_error_threshold : float ;
     max_expressiveness_level : int ;
@@ -27,7 +27,7 @@ module Config = struct
 
   let default : t = {
     components_per_level = BooleanComponents.levels ++ NumComponents.non_linear_levels ++ RangeComponents.levels ;
-    cost_limit = 9 ;
+    size_limit = 9 ;
     disable_constant_solutions = true ;
     type_error_threshold = 0.333333 ;
     max_expressiveness_level = 1024 ;
@@ -125,7 +125,7 @@ let solve_impl (config : Config.t) (task : task) =
   let range_components = typed_components Type.RANGE in
 
   let empty_candidates () = Array.(init ((length config.components_per_level) + 1)
-                                        ~f:(fun _ -> init config.cost_limit ~f:(fun _ -> DList.create ())))
+                                        ~f:(fun _ -> init config.size_limit ~f:(fun _ -> DList.create ())))
    in
 
   let num_candidates = empty_candidates () in
@@ -198,7 +198,7 @@ let solve_impl (config : Config.t) (task : task) =
       | None -> ()
       | Some result
         -> let expr_cost = f_cost result.expr
-            in (if expr_cost < config.cost_limit && Type.equal task_codomain component.codomain then check result)
+            in (if expr_cost < config.size_limit && Type.equal task_codomain component.codomain then check result)
              ; add_candidate candidates expr_level expr_cost result
      in apply_component op_level expr_level cost component.domain applier
    in
@@ -209,7 +209,7 @@ let solve_impl (config : Config.t) (task : task) =
                                             (config.order (grammar_cost level2) cost2))
                   (List.(cartesian_product (range 1 ~stop:`inclusive (Int.min config.max_expressiveness_level
                                                                               (Array.length config.components_per_level)))
-                                           (range 2 config.cost_limit)))
+                                           (range 2 config.size_limit)))
    in
 
   Log.debug (lazy ( "  > Exploration order:")) ;
