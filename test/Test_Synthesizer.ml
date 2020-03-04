@@ -4,6 +4,11 @@ open ExcelSynth
 
 open Synthesizer
 
+let config = {
+  Config.default with
+  components_per_level = BooleanComponents.levels ++ NumComponents.levels
+}
+
 let plus_x_y () =
   let result = solve {
     inputs = List.map ~f:(Array.map ~f:(fun i -> Value.Num i))
@@ -16,7 +21,7 @@ let plus_x_y () =
    in Alcotest.(check string) "identical" "(x+y)" result_string
 
 let ge_plus_x_z_y () =
-  let result = solve {
+  let result = solve ~config {
     inputs = List.map ~f:(Array.map ~f:(fun i -> Value.Num i))
                [ [| 3. ;   7. ;  -1. ; -4. ;  6. |]
                ; [| 9. ;  -3. ; -10. ; 11. ; -1. |]
@@ -29,7 +34,7 @@ let ge_plus_x_z_y () =
    in Alcotest.(check string) "identical" "((x+z)>=y)" result_string
 
 let not_or_eq_w_x_eq_y_z () =
-  let result = solve ~config:{ Config.default with components_per_level = BooleanComponents.levels ++ NumComponents.linear_levels } {
+  let result = solve ~config {
     inputs = List.map ~f:(Array.map ~f:(fun i -> Value.Num i))
                [ [| 4. ; -1. ;  -5. ;  1. ;  -1. ; 20. |]
                ; [| 3. ;  7. ;  -1. ; -4. ;   1. ; 20. |]

@@ -13,9 +13,9 @@ let config_flags =
     and col_pointwise               = flag "check-pointwise-col-operations"
                                            (optional_with_default Driver.Config.default.col_pointwise bool)
                                            ~doc:"BOOLEAN synthesize pointwise transformations for columns"
-    and size_limit                  = flag "max-expr-size"
-                                           (optional_with_default Driver.Config.default._Synthesizer.size_limit int)
-                                           ~doc:"INTEGER maximum cost (AST size) of expressions to explore"
+    and enable_booleans             = flag "enable-booleans"
+                                           (optional_with_default false bool)
+                                           ~doc:"BOOLEAN enable Boolean and conditional expressions"
     and disable_constant_solutions  = flag "disable-constant-solutions"
                                            (optional_with_default Driver.Config.default._Synthesizer.disable_constant_solutions bool)
                                            ~doc:"BOOLEAN disable constant formulas (e.g. =0.0) for cells"
@@ -31,28 +31,44 @@ let config_flags =
     and row_pointwise               = flag "check-pointwise-row-operations"
                                            (optional_with_default Driver.Config.default.row_pointwise bool)
                                            ~doc:"BOOLEAN synthesize pointwise transformations for rows"
+    and relative_error              = flag "relative-error"
+                                           (optional_with_default !Float.Approx.rel_error float)
+                                           ~doc:"BOOLEAN synthesize pointwise transformations for rows"
+    and size_limit                  = flag "max-expr-size"
+                                           (optional_with_default Driver.Config.default._Synthesizer.size_limit int)
+                                           ~doc:"INTEGER maximum cost (AST size) of expressions to explore"
     and top_left_only               = flag "restrict-to-top-left-data"
                                            (optional_with_default Driver.Config.default.top_left_only bool)
                                            ~doc:"BOOLEAN only use data to the top left of a cell in formulas"
-    and type_error_threshold        = flag "type-error-threshold"
-                                           (optional_with_default Driver.Config.default._Synthesizer.type_error_threshold float)
+    and type_mismatch_threshold     = flag "type-error-threshold"
+                                           (optional_with_default Driver.Config.default._Synthesizer.type_mismatch_threshold float)
                                            ~doc:"FLOAT maximum fraction of cells that may be ignored due to type errors"
-     in {
-       Driver.Config.default with
-       aggregate_2d ;
-       col_pointwise ;
-       last_col_aggregate ;
-       last_row_aggregate ;
-       max_threads ;
-       row_pointwise ;
-       top_left_only ;
-       _Synthesizer = {
-         Driver.Config.default._Synthesizer with
-         size_limit ;
-         disable_constant_solutions ;
-         type_error_threshold ;
-       } ;
-     } [@warning "-23"]
+    and value_mismatch_threshold    = flag "value-error-threshold"
+                                           (optional_with_default Driver.Config.default._Synthesizer.value_mismatch_threshold float)
+                                           ~doc:"FLOAT maximum fraction of cells that may be ignored due to value errors"
+     in Float.Approx.rel_error := relative_error
+      ; let components_per_level = Synthesizer.(
+          if enable_booleans
+          then BooleanComponents.levels ++ NumComponents.levels ++ RangeComponents.levels
+          else NumComponents.no_bool_levels ++ RangeComponents.levels
+        ) in {
+          Driver.Config.default with
+          aggregate_2d ;
+          col_pointwise ;
+          last_col_aggregate ;
+          last_row_aggregate ;
+          max_threads ;
+          row_pointwise ;
+          top_left_only ;
+          _Synthesizer = {
+            Driver.Config.default._Synthesizer with
+            components_per_level ;
+            disable_constant_solutions ;
+            size_limit ;
+            type_mismatch_threshold ;
+            value_mismatch_threshold ;
+          } ;
+        } [@warning "-23"]
   ]
 
 let command =

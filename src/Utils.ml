@@ -5,15 +5,17 @@ open Exceptions
 module Float = struct
   include Float
 
-  let eps = Array.of_list_map (List.range 0 16) (fun i -> int_pow 10. Int.(-i))
+  module Approx = struct
+    let rel_error = ref 0.0005
 
-  let equal ?(eps_digits = 8) x y =
-    abs (x -. y) < eps.(eps_digits)
+    let equal x y =
+      abs (x -. y) <= abs (x *. !rel_error)
 
-  let compare ?(eps_digits = 8) x y =
-    if equal x y then 0
-    else if x -. y > eps.(eps_digits) then 1
-    else -1
+    let compare x y =
+      if equal x y then 0
+      else if x -. y > abs (x *. !rel_error) then 1
+      else -1
+  end
 end
 
 module List = struct

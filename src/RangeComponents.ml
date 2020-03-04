@@ -4,7 +4,7 @@ open Exceptions
 open Expr
 open Utils
 
-let aggregate = [
+let light_aggregate = [
    {
     name = "range-sum";
     codomain = Type.NUM;
@@ -15,8 +15,11 @@ let aggregate = [
                       -> Num (List.(fold r ~init:0.
                                          ~f:(fun acc re -> acc +. (fold re ~init:0. ~f:(fun acce (Num e) -> e +. acce))))));
     to_string = (fun [@warning "-8"] [a] -> "SUM(" ^ a ^ ")")
-  } ;
-   {
+  }
+]
+
+let heavy_aggregate = light_aggregate @ [
+  {
     name = "range-avg";
     codomain = Type.NUM;
     domain = Type.[RANGE];
@@ -31,7 +34,7 @@ let aggregate = [
   }
 ]
 
-let drop_head = aggregate @ [
+let drop_head = heavy_aggregate @ [
    {
     name = "range-drop-top";
     codomain = Type.RANGE;
@@ -42,7 +45,7 @@ let drop_head = aggregate @ [
     to_string = (fun [@warning "-8"] [a] -> try Excel.Range.offset a 1 0 0 0
                                             with _ -> "DROP_TOP(" ^ a ^ ")")
   } ;
-   {
+  {
     name = "range-drop-left";
     codomain = Type.RANGE;
     domain = Type.[RANGE];
@@ -65,7 +68,7 @@ let drop_tail = drop_head @ [
     to_string = (fun [@warning "-8"] [a] -> try Excel.Range.offset a 0 0 (-1) 0
                                             with _ -> "DROP_BOTTOM(" ^ a ^ ")")
   } ;
-   {
+  {
     name = "range-drop-right";
     codomain = Type.RANGE;
     domain = Type.[RANGE];
@@ -78,4 +81,4 @@ let drop_tail = drop_head @ [
   }
 ]
 
-let levels = [| aggregate ; drop_head ; drop_tail |]
+let levels = [| light_aggregate ; heavy_aggregate ; drop_head ; drop_tail |]

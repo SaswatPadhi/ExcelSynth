@@ -49,27 +49,27 @@ type synthesized = {
   outputs : Value.t array ;
 } [@@deriving sexp]
 
-let apply ?(type_error_threshold = 0.0) (comp : component) (args : synthesized list) : synthesized option =
+let apply ?(type_mismatch_threshold = 0.0) (comp : component) (args : synthesized list) : synthesized option =
   let subexprs = List.map args ~f:(fun arg -> arg.expr)
    in if not (comp.can_apply subexprs) then None
       else try
         let select idx = List.map args ~f:(fun arg -> arg.outputs.(idx)) in
-        let errors = ref 0. and length = ref 0. in
+        let mismatches = ref 0. and length = ref 0. in
         let outputs = Array.mapi (List.hd_exn args).outputs
                                  ~f:(fun i _ -> try length := !length +. 1.
                                                   ; comp.evaluate (select i)
-                                                with Match_failure _ -> errors := !errors +. 1.
+                                                with Match_failure _ -> mismatches := !mismatches +. 1.
                                                                       ; Value.Error)
-         in let type_error_rate = Float.(!errors / !length)
-             in if Float.(type_error_rate > type_error_threshold) then None
-                else begin
-                  let expr = Application (comp, subexprs)
-                   in Log.debug (lazy ("    @ error rate " ^ Float.(to_string type_error_rate) ^ ":"))
-                    ; Log.debug (lazy ("    + " ^ (to_string (Array.of_list_map (List.range 0 1024)
-                                                                                ~f:(fun i -> "v" ^ (Int.to_string i)))
-                                                             expr)))
-                    ; Log.debug (lazy ("     `-- [| " ^ Array.(to_string_map outputs ~sep:" ; " ~f:Value.to_string) ^ " |]"))
-                    ; Some { expr ; outputs }
-                end
+         in if Float.(!mismatches > type_mismatch_threshold *. !length) then None
+            else begin
+              let expr = Application (comp, subexprs)
+               in Log.debug (lazy ("    @ type mismatches = " ^ Float.(to_string !mismatches)
+                                  ^ "/" ^ Float.(to_string !length) ^ " :"))
+                ; Log.debug (lazy ("    + " ^ (to_string (Array.of_list_map (List.range 0 1024)
+                                                                            ~f:(fun i -> "v" ^ (Int.to_string i)))
+                                                         expr)))
+                ; Log.debug (lazy ("     `-- [| " ^ Array.(to_string_map outputs ~sep:" ; " ~f:Value.to_string) ^ " |]"))
+                ; Some { expr ; outputs }
+            end
       with Internal_Exn _ as e -> raise e
          | e -> None

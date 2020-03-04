@@ -15,23 +15,28 @@ let rec ( ++ ) = fun x y ->
   else map ~f:(fun (ex,ey) -> ex @ ey)
            (zip_exn x (append y (create (last y) ~len:(length x - length y))))
 
+let ( -*- ) (from : Expr.component list) (comps : Expr.component list) =
+  List.(fold comps ~init:from ~f:(fun from c -> filter from ~f:(fun cf -> not (String.equal c.name cf.name))))
+
 module Config = struct
   type t = {
     components_per_level : Expr.component list array ;
-    size_limit : int ;
     disable_constant_solutions : bool ;
-    type_error_threshold : float ;
     max_expressiveness_level : int ;
     order : int -> int -> float ;
+    size_limit : int ;
+    type_mismatch_threshold : float ;
+    value_mismatch_threshold : float ;
   }
 
   let default : t = {
-    components_per_level = BooleanComponents.levels ++ NumComponents.non_linear_levels ++ RangeComponents.levels ;
-    size_limit = 9 ;
+    components_per_level = NumComponents.no_bool_levels ++ RangeComponents.levels ;
     disable_constant_solutions = true ;
-    type_error_threshold = 0.333333 ;
     max_expressiveness_level = 1024 ;
     order = (fun g_cost e_cost -> (Int.to_float e_cost) *. (Float.log (Int.to_float g_cost))) ;
+    size_limit = 9 ;
+    type_mismatch_threshold = 0.333333 ;
+    value_mismatch_threshold = 0.05 ;
   }
 end
 
@@ -42,6 +47,7 @@ type task = {
 }
 
 exception Success of Expr.synthesized
+exception IgnoredSolution of Expr.synthesized
 
 module DList = Doubly_linked
 
@@ -105,10 +111,6 @@ module IntTuple = struct
   include Comparable.Make (T)
 end
 
-let subtract ~(from : Expr.component list) (comps : Expr.component list) =
-  List.filter from ~f:(fun c -> not (List.mem comps c
-                                       ~equal:(fun c1 c2 -> String.equal c1.name c2.name)))
-
 let solve_impl (config : Config.t) (task : task) =
   let typed_components t_type = Array.append
     (Array.create ~len:1 [])
@@ -117,7 +119,7 @@ let solve_impl (config : Config.t) (task : task) =
                 ~f:(fun level comps
                     -> List.filter ~f:(fun c -> Type.equal c.codomain t_type)
                                    (if level < 1 then comps
-                                    else subtract ~from:comps (config.components_per_level.(level - 1))))) in
+                                    else comps -*- (config.components_per_level.(level - 1))))) in
 
   let num_components = typed_components Type.NUM in
   let bool_components = typed_components Type.BOOL in
@@ -169,18 +171,23 @@ let solve_impl (config : Config.t) (task : task) =
                                                                        ^ ": No majority type found!")))
   ;
 
-  let value_equal_approx = Value.(fun v1 v2 -> equal v2 Error || equal v1 v2) in
+  let typed_value_equal = Value.(fun v1 v2 -> not (Type.equal (typeof v2) (typeof v1)) || equal v1 v2) in
   let check (candidate : Expr.synthesized) =
-    if not (config.disable_constant_solutions && Expr.is_constant candidate.expr)
-    then if Array.equal value_equal_approx task.outputs candidate.outputs
-         then raise (Success candidate)
+    let length = ref 0. in
+    let mismatches = Array.fold2_exn task.outputs candidate.outputs ~init:0.
+                                     ~f:(fun acc v1 v2 -> length := !length +. 1.
+                                                        ; if typed_value_equal v1 v2 then acc else acc +. 1.)
+     in Log.debug (lazy ("     %-- value mismatches = " ^ Float.(to_string mismatches)
+                              ^ "/" ^ Float.(to_string !length) ^ " :"))
+      ; if Float.(mismatches <= config.value_mismatch_threshold *. !length)
+        then if config.disable_constant_solutions && Expr.is_constant candidate.expr
+             then raise (IgnoredSolution candidate)
+             else raise (Success candidate)
    in
 
   let task_codomain = Value.majority_type task.outputs in
 
   DList.iter ~f:check (typed_candidates task_codomain).(0).(1) ;
-
-  let f_cost = Expr.size and f_divide = divide_size in
 
   let apply_component op_level expr_level cost domain applier =
     let rec apply_cells acc domain locations =
@@ -190,14 +197,14 @@ let solve_impl (config : Config.t) (task : task) =
                       ~f:(fun x -> apply_cells (x :: acc) arg_types locations)
       | ([], []) -> applier (List.rev acc)
       | _ -> raise (Internal_Exn "Impossible case!")
-     in f_divide (apply_cells [] domain) (List.length domain) op_level expr_level (cost - 1)
+     in divide_size (apply_cells [] domain) (List.length domain) op_level expr_level (cost - 1)
    in
   let expand_component op_level expr_level cost candidates (component : Expr.component) =
     let applier args =
-      match Expr.apply ~type_error_threshold:config.type_error_threshold component args with
+      match Expr.apply ~type_mismatch_threshold:config.type_mismatch_threshold component args with
       | None -> ()
       | Some result
-        -> let expr_cost = f_cost result.expr
+        -> let expr_cost = Expr.size result.expr
             in (if expr_cost < config.size_limit && Type.equal task_codomain component.codomain then check result)
              ; add_candidate candidates expr_level expr_cost result
      in apply_component op_level expr_level cost component.domain applier
@@ -240,7 +247,7 @@ let solve_impl (config : Config.t) (task : task) =
 let solve ?(config = Config.default) (task : task) : Expr.synthesized =
   Log.debug (lazy ("Starting hybrid enumeration:")) ;
   Log.debug (lazy ("  > Output:")) ;
-  Log.debug (lazy ("    [" ^ (Array.to_string_map task.outputs ~sep:"," ~f:Value.to_string) ^ "]")) ;
+  Log.debug (lazy ("    [ " ^ (Array.to_string_map task.outputs ~sep:" ; " ~f:Value.to_string) ^ " ]")) ;
   Log.debug (lazy ("  > Inputs:")) ;
   List.(iteri task.inputs
               ~f:(fun i input -> Log.debug (lazy ("    + v" ^ (Int.to_string i) ^ ": [ " ^
@@ -250,6 +257,11 @@ let solve ?(config = Config.default) (task : task) : Expr.synthesized =
     ; raise NoSuchFunction
   with NoMajorityType
        -> Log.debug (lazy ("  # NO MAJORITY OUTPUT TYPE FOUND, ABORTING!"))
+        ; raise NoSuchFunction
+     | IgnoredSolution candidate
+       -> Log.debug (lazy ("  # Ignoring solution (@ size " ^ (Int.to_string (Expr.size candidate.expr)) ^ "):"))
+        ; Log.debug (lazy ("    " ^ (Expr.to_string (Array.of_list_mapi task.inputs ~f:(fun i _ -> "v" ^ (Int.to_string i)))
+                                                    candidate.expr)))
         ; raise NoSuchFunction
      | Success candidate
        -> Log.debug (lazy ("  $ Solution (@ size " ^ (Int.to_string (Expr.size candidate.expr)) ^ "):"))

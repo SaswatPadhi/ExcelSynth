@@ -8,6 +8,9 @@
   let info  _ = ()
   let debug _ = ()
 
+  let push_indent () = ()
+  let pop_indent () = ()
+
   let disable () = ()
 
   let [@warning "-27"] enable ?msg ?level _ = ()
@@ -25,6 +28,7 @@
 
   let log_chan = ref stderr
   let log_level = ref Debug
+  let log_indent = ref 0
 
   let is_enabled = ref false
   let should_log level =
@@ -38,15 +42,19 @@
     then begin
       Out_channel.fprintf
         !log_chan
-        "%s  %s  %s\n"
+        "%s  %s  %s%s\n"
         Time.(to_string (now ()))
         (level_str level)
+        (String.make !log_indent ' ')
         (Lazy.force lstr)
     end
 
   let info lstr = do_log Info lstr
   let debug lstr = do_log Debug lstr
   let error lstr = do_log Error lstr
+
+  let push_indent () = log_indent := !log_indent + 2
+  let pop_indent () = log_indent := !log_indent - 2
 
   let disable () = is_enabled := false
 
@@ -57,5 +65,5 @@
        ; log_level := level
        ; is_enabled := true
        ; info (lazy "")
-       ; info (lazy (msg ^ String.(make (79 - (length msg)) '=')))
+       ; info (lazy (msg ^ " >" ^ String.(make (77 - (length msg)) '=')))
 [%%endif]

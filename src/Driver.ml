@@ -20,7 +20,7 @@ module Config = struct
     col_pointwise = true ;
     last_col_aggregate = true ;
     last_row_aggregate = true ;
-    max_threads = 2 ;
+    max_threads = 1 ;
     row_pointwise = false ;
     top_left_only = true ;
     _Synthesizer = Synthesizer.Config.default ;
@@ -226,24 +226,31 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
        in
           Lwt_preemptive.(simple_init () ; set_bounds (0, config.max_threads) ; set_max_number_of_threads_queued 1024)
         ; (if config.last_row_aggregate && rlen > 3
-           then (match Array.(findi !>(task.data) ~f:(fun r _ -> exists !>(task.data).(rlen-r-1) ~f:(fun c -> Type.(equal NUM (Value.typeof c))))) with
+           then (Log.info (lazy "----< LAST ROW AGGREGATE >----") ; Log.push_indent () ;
+                 match Array.(findi !>(task.data) ~f:(fun r _ -> exists !>(task.data).(rlen-r-1) ~f:(fun c -> Type.(equal NUM (Value.typeof c))))) with
                  | Some (r, _) when rlen - r > 4
                    -> let last_row = rlen - r - 1
                        in Lwt_main.run (
                             Lwt_list.iter_p (fun c -> if String.is_empty !>mask.(last_row).(c)
                                                       then let work () = apply_range_formula last_row c (solver (make_range_problem last_row c))
                                                             in Lwt_preemptive.detach work ()
-                                                       else Lwt.return ())
+                                                      else Lwt.return ())
                                             (List.range 0 clen))
-                 | _ -> ()))
+                        ; Log.pop_indent ()
+                 | _ -> ())
+           else Log.info (lazy "LAST ROW AGGREGATE SKIPPED!"))
         ; (if config.col_pointwise
-           then Lwt_main.run (
-                  Lwt_list.iter_p (fun c -> let row_mask = Some (Array.map !>mask ~f:(fun row -> String.is_empty row.(c))) in
-                                            let work () = apply_col_formula ~row_mask c (solver (make_pointwise_col_problem ~row_mask c))
-                                             in Lwt_preemptive.detach work ())
-                                  (List.range 0 clen)))
+           then (Log.info (lazy "----< COL POINTWISE >----") ; Log.push_indent () ;
+                 Lwt_main.run (
+                   Lwt_list.iter_p (fun c -> let row_mask = Some (Array.map !>mask ~f:(fun row -> String.is_empty row.(c))) in
+                                             let work () = apply_col_formula ~row_mask c (solver (make_pointwise_col_problem ~row_mask c))
+                                              in Lwt_preemptive.detach work ())
+                                   (List.range 0 clen)) ;
+                 Log.pop_indent ())
+           else Log.info (lazy "COL POINTWISE SKIPPED!"))
         ; (if config.last_col_aggregate && clen > 3
-           then (match Array.(findi !>(task.data).(0) ~f:(fun c _ -> exists !>(task.data) ~f:(fun r -> Type.(equal NUM (Value.typeof r.(clen-c-1)))))) with
+           then (Log.info (lazy "----< LAST COL AGGREGATE >----") ; Log.push_indent () ;
+                 match Array.(findi !>(task.data).(0) ~f:(fun c _ -> exists !>(task.data) ~f:(fun r -> Type.(equal NUM (Value.typeof r.(clen-c-1)))))) with
                  | Some (c, _) when clen - c > 4
                    -> let last_col = clen - c - 1
                        in Lwt_main.run (
@@ -252,13 +259,18 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
                                                             in Lwt_preemptive.detach work ()
                                                       else Lwt.return ())
                                             (List.range 0 rlen))
-                 | _ -> ()))
+                        ; Log.pop_indent ()
+                 | _ -> ())
+           else Log.info (lazy "LAST COL AGGREGATE SKIPPED!"))
         ; (if config.row_pointwise
-           then Lwt_main.run (
-                  Lwt_list.iter_p (fun r -> let col_mask = Some (Array.map !>mask.(r) ~f:String.is_empty) in
-                                            let work () = apply_row_formula ~col_mask r (solver (make_pointwise_row_problem ~col_mask r))
-                                              in Lwt_preemptive.detach work ())
-                                  (List.range 0 rlen)))
+           then (Log.info (lazy "----< ROW POINTWISE >----") ; Log.push_indent () ;
+                 Lwt_main.run (
+                   Lwt_list.iter_p (fun r -> let col_mask = Some (Array.map !>mask.(r) ~f:String.is_empty) in
+                                             let work () = apply_row_formula ~col_mask r (solver (make_pointwise_row_problem ~col_mask r))
+                                               in Lwt_preemptive.detach work ())
+                                   (List.range 0 rlen)) ;
+                 Log.pop_indent ())
+           else Log.info (lazy "ROW POINTWISE SKIPPED!"))
         ; Matrix.Offsetted.merge mask
 
 let run ?(config = Config.default) (task : string task) : string Matrix.t =

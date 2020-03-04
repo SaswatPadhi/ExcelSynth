@@ -18,19 +18,13 @@ include T
 module Compare = Comparable.Make (T)
 
 let equal v1 v2 = match v1 , v2 with
-                  | Num f1, Num f2 -> Float.equal f1 f2
+                  | Num f1, Num f2 -> Float.Approx.equal f1 f2
                   | _ -> Compare.equal v1 v2
 [@@inline always]
 
 let compare v1 v2 = match v1 , v2 with
-                    | Num f1, Num f2 -> Float.compare f1 f2
+                    | Num f1, Num f2 -> Float.Approx.compare f1 f2
                     | _ -> Compare.compare v1 v2
-[@@inline always]
-
-let orig_equal = equal
-let equal v1 v2 = match v1 , v2 with
-                  | Num f1, Num f2 -> Float.equal f1 f2
-                  | _ -> orig_equal v1 v2
 [@@inline always]
 
 let rec typeof : t -> Type.t = Type.(function
