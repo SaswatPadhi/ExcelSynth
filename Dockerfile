@@ -22,8 +22,9 @@ RUN apt-get update && \
                         m4 make \
                         patch python3 python3-distutils \
                         sudo \
-                        time tzdata \
+                        time tmux tzdata \
                         unzip \
+                        vim \
                         && \
     apt-get autoremove -y --purge
 
