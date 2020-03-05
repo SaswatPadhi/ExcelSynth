@@ -6,7 +6,48 @@ ExcelSynth
 &nbsp;
 [![](https://img.shields.io/docker/cloud/build/padhi/excelsynth.svg?logo=docker&style=popout&label=Docker+Image)][docker-hub]
 
-A simple enumerative synthesizer for recovering Excel formulas from CSVs.
+An enumerative synthesizer for recovering Excel formulas from CSVs.
+
+<table>
+   <thead>
+   <tr>
+      <th align='center'>Input: CSV File</th>
+      <th align='center'>Output: Formula Mask</th>
+   </tr>
+   </thead>
+   <tbody>
+      <tr>
+         <td>
+            <sub><pre lang='text'>
+                <code>
+Col 1  ,  Col 2  ,  Col 3  ,  Col 4  ,  Col 5
+Row 2  ,  1.     ,  10.    ,  9.5    ,  24.
+Row 3  ,  23.    ,  12.    ,  0.5    ,  35.
+Row 4  ,  22.    ,  2.     ,  -9.    ,  24.
+Row 5  ,  -1.    ,  6.     ,  6.5    ,   5.
+Row 6  ,  59.    ,  0.     ,  -29.5  ,  41.
+Row 7  ,  11.    ,  -2.    ,  -7.5   ,   9.
+Row 8  ,  115.   ,  14.    ,  -43.5  ,  23.
+                </code>
+            </pre></sub>
+         </td>
+         <td>
+            <sub><pre lang='text'>
+                <code>
+ ,             ,                       ,                   ,
+ ,             ,                       , =(C2-(B2/(1.+1.)) ,
+ ,             ,                       , =(C3-(B3/(1.+1.)) ,
+ ,             ,                       , =(C4-(B4/(1.+1.)) ,
+ ,             ,                       , =(C5-(B5/(1.+1.)) ,
+ ,             ,                       , =(C6-(B6/(1.+1.)) ,
+ ,             ,                       , =(C7-(B7/(1.+1.)) ,
+ , =SUM(B2:B7) , =(SUM(C2:C7)/(1.+1.)) , =(C8-(B8/(1.+1.)) , =AVERAGE(E2:E7)
+                </code>
+            </pre></sub>
+         </td>
+      </tr>
+   </tbody>
+</table>
 
 ----
 
