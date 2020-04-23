@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import csv
 import logging
@@ -24,22 +26,33 @@ if __name__ == "__main__":
     parser.add_argument('tables_data_csv', type=argparse.FileType('r'), nargs=1)
     args = parser.parse_args()
 
+    tables_csv_reader = csv.reader(args.tables_data_csv[0])
+    next(tables_csv_reader)
+
     todo = {}
-    for i, row in enumerate(csv.reader(args.tables_data_csv[0])):
-        e_csv_path = args.eval_csv_dir.joinpath(row[0].strip())
-        if not e_csv_path.is_file():
-            logging.warning(f'Skipped missing file "{e_csv_path.name}"')
-            continue
+    if args.table_range_column < 0:
+        for i, row in enumerate(tables_csv_reader):
+            e_csv_path = args.eval_csv_dir.joinpath(row[0].strip())
+            if not e_csv_path.is_file():
+                logging.warning(f'Skipped missing file "{e_csv_path.name}"')
+                continue
+            todo[e_csv_path] = {'FULL_SHEET'}
+    else:
+        for i, row in enumerate(tables_csv_reader):
+            e_csv_path = args.eval_csv_dir.joinpath(row[0].strip())
+            if not e_csv_path.is_file():
+                logging.warning(f'Skipped missing file "{e_csv_path.name}"')
+                continue
 
-        table = row[args.table_range_column].strip()
-        if not table or table == '<null>':
-            logging.warning(f'Skipped an empty range in "{e_csv_path.name}" -- see line {i}')
-            continue
+            table = row[args.table_range_column].strip()
+            if not table or table == '<null>':
+                logging.warning(f'Skipped an empty range in "{e_csv_path.name}" -- see line {i}')
+                continue
 
-        if e_csv_path in todo:
-            todo[e_csv_path].add(table)
-        else:
-            todo[e_csv_path] = set([table])
+            if e_csv_path in todo:
+                todo[e_csv_path].add(table)
+            else:
+                todo[e_csv_path] = {table}
 
     logging.info('')
     _, tmp_r_path = mkstemp()
@@ -54,11 +67,15 @@ if __name__ == "__main__":
             fm_out_path = args.output_dir.joinpath(e_csv_path.name)
             logging.info(f'@ {t+1:03} / {total:03} : "{e_csv_path.name}"')
             logging.info(f' `-- Writing to "{fm_out_path}"')
+
             for i, table in enumerate(data):
                 logging.info(f' `-- Inspecting range [{table}] ...')
                 try:
-                    mask = '' if i < 1 else f'-mask "{tmp_r_path}"'
-                    cmdline = f'dune exec bin/App.exe -- -range "{table}" {mask} "{e_csv_path}"'
+                    if table == 'FULL_SHEET':
+                        cmdline = f'dune exec bin/App.exe "{e_csv_path}"'
+                    else:
+                        mask = '' if i < 1 else f'-mask "{tmp_r_path}"'
+                        cmdline = f'dune exec bin/App.exe -- -range "{table}" {mask} "{e_csv_path}"'
                     logging.debug(f'     $ {cmdline}')
 
                     with open(tmp_w_path, 'w') as tmp_w_file:

@@ -6,7 +6,7 @@ LABEL maintainer="padhi@cs.ucla.edu"
 
 
 ENV OPAM_VERSION  2.0.6
-ENV OCAML_VERSION 4.09.0+flambda
+ENV OCAML_VERSION 4.10.0+flambda
 
 ENV HOME /home/opam
 
@@ -43,9 +43,8 @@ WORKDIR $HOME
 RUN opam install --yes alcotest.0.8.5 \
                        core.v0.13.0 \
                        csv.2.4 \
-                       dune.2.3.1 \
-                       lwt.5.1.2 \
-                       ppx_let.v0.13.0 \
+                       dune.2.5.1 \
+                       lwt.5.2.0 \
                        && \
     opam clean --yes && \
     git clone https://github.com/SaswatPadhi/ExcelSynth.git

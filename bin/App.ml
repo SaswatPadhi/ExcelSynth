@@ -33,7 +33,7 @@ let config_flags =
                                            ~doc:"BOOLEAN synthesize pointwise transformations for rows"
     and relative_error              = flag "relative-error"
                                            (optional_with_default !Float.Approx.rel_error float)
-                                           ~doc:"BOOLEAN synthesize pointwise transformations for rows"
+                                           ~doc:"FLOAT the fractional relative error allowed in float comparisons"
     and size_limit                  = flag "max-expr-size"
                                            (optional_with_default Driver.Config.default._Synthesizer.size_limit int)
                                            ~doc:"INTEGER maximum cost (AST size) of expressions to explore"

@@ -4,6 +4,16 @@ open Exceptions
 open Expr
 open Utils
 
+let raw_vector_sum = List.fold ~init:0. ~f:(+.)
+
+let vector_sum = List.fold ~init:0. ~f:(fun [@warning "-8"] acce (Value.Num e) -> e +. acce)
+
+let raw_range_sum = List.fold ~init:0. ~f:(fun acc re -> acc +. (raw_vector_sum re))
+
+let range_sum = List.fold ~init:0. ~f:(fun acc re -> acc +. (vector_sum re))
+
+let size = List.(fold ~init:0 ~f:(fun acc re -> acc + (length re)))
+
 let light_aggregate = [
    {
     name = "range-sum";
@@ -11,9 +21,8 @@ let light_aggregate = [
     domain = Type.[RANGE];
     can_apply = (function _ -> true);
     evaluate = Value.(function [@warning "-8"] [Range r]
-                      when Int.(List.(fold r ~init:0 ~f:(fun acc re -> acc + (length re))) > 4)
-                      -> Num (List.(fold r ~init:0.
-                                         ~f:(fun acc re -> acc +. (fold re ~init:0. ~f:(fun acce (Num e) -> e +. acce))))));
+                      when (size r) > 4
+                      -> Num (range_sum r));
     to_string = (fun [@warning "-8"] [a] -> "SUM(" ^ a ^ ")")
   }
 ]
@@ -25,16 +34,30 @@ let heavy_aggregate = light_aggregate @ [
     domain = Type.[RANGE];
     can_apply = (function _ -> true);
     evaluate = Value.(function [@warning "-8"] [Range r]
-                      when Int.(List.(fold r ~init:0 ~f:(fun acc re -> acc + (length re))) > 3)
-                      -> Num ((List.(fold r ~init:0.
-                                          ~f:(fun acc re -> acc +. ((fold re ~init:0. ~f:(fun acce (Num e) -> e +. acce))
-                                                                    /. (Float.of_int (List.length re))))))
-                              /. (Float.of_int (List.length r))));
+                      when (size r) > 3
+                      -> Num ((range_sum r) /. (Float.of_int (size r))));
     to_string = (fun [@warning "-8"] [a] -> "AVERAGE(" ^ a ^ ")")
   }
 ]
 
-let drop_head = heavy_aggregate @ [
+let heavier_aggregate = heavy_aggregate @ [
+  {
+    name = "range-stdev";
+    codomain = Type.NUM;
+    domain = Type.[RANGE];
+    can_apply = (function _ -> true);
+    evaluate = Value.(function [@warning "-8"] [Range r]
+                      when (size r) > 3
+                      -> let sz = Float.of_int (size r) in
+                         let avg = (range_sum r) /. sz
+                          in Num (Float.sqrt List.(
+                            (raw_range_sum (map r (map ~f:(fun (Num n) -> (n -. avg) **. 2.)))) /. sz
+                          )));
+    to_string = (fun [@warning "-8"] [a] -> "STDEVP(" ^ a ^ ")")
+  }
+]
+
+let drop_head = heavier_aggregate @ [
    {
     name = "range-drop-top";
     codomain = Type.RANGE;
@@ -81,4 +104,4 @@ let drop_tail = drop_head @ [
   }
 ]
 
-let levels = [| light_aggregate ; heavy_aggregate ; drop_head ; drop_tail |]
+let levels = [| light_aggregate ; heavy_aggregate ; heavier_aggregate ; drop_head ; drop_tail |]

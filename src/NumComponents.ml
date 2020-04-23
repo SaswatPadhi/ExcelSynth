@@ -122,8 +122,8 @@ let polyhedra = octagons @ [
     domain = Type.[NUM; NUM];
     can_apply = Value.(function
                        | [x ; y]
-                         -> (x =/= Constant (Num 0.)) && (x =/= Constant (Num 1.))
-                         && (y =/= Constant (Num 0.)) && (y =/= Constant (Num 1.))
+                         -> (x =/= Constant (Num 0.)) && (x =/= Constant (Num 1.)) && (x =/= Constant (Num (-1.)))
+                         && (y =/= Constant (Num 0.)) && (y =/= Constant (Num 1.)) && (x =/= Constant (Num (-1.)))
                          && (is_constant x || is_constant y)
                        | _ -> false);
     evaluate = Value.(fun [@warning "-8"] [Num x ; Num y] -> Num (x *. y));
@@ -151,8 +151,8 @@ let peano = polynomials @ [
     domain = Type.[NUM; NUM];
     can_apply = Value.(function
                        | [x ; y] -> x =/= y
-                                 && (x =/= Constant (Num 0.)) && (x =/= Constant (Num 1.))
-                                 && (y =/= Constant (Num 0.)) && (y =/= Constant (Num 1.))
+                                 && (x =/= Constant (Num 0.)) && (x =/= Constant (Num 1.)) && (x =/= Constant (Num (-1.)))
+                                 && (y =/= Constant (Num 0.)) && (y =/= Constant (Num 1.)) && (y =/= Constant (Num (-1.)))
                        | _ -> false);
     evaluate = Value.(function [@warning "-8"]
                       [Num x ; Num y] when not Float.Approx.(equal y 0.)
@@ -195,3 +195,7 @@ let no_bool_levels =
   let cequal = fun c1 c2 -> String.equal c1.name c2.name
    in Array.map [| octagons ; polyhedra ; polynomials ; peano |]
                 ~f:List.(filter ~f:(fun c -> not (mem intervals c ~equal:cequal)))
+
+let subtraction = List.find_exn peano ~f:(fun c -> String.equal c.name "num-sub")
+
+let division = List.find_exn peano ~f:(fun c -> String.equal c.name "num-div")

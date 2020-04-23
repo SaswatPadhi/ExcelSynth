@@ -65,5 +65,7 @@
        ; log_level := level
        ; is_enabled := true
        ; info (lazy "")
-       ; info (lazy (msg ^ " >" ^ String.(make (77 - (length msg)) '=')))
+       ; info (lazy msg)
+       ; info (lazy (String.(make (128 - (length msg)) '=')))
+       ; info (lazy "")
 [%%endif]

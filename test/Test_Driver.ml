@@ -121,7 +121,7 @@ let headings_test () =
 let range_bound_test () =
   let result = run_on_values {
     constants = [] ;
-    data = Matrix.Offsetted.create ~top_left:(Some (1,1)) ~bottom_right:(Some (8,4)) Value.[|
+    data = Matrix.Offsetted.create ~top_left:(Some (1,1)) Value.[|
       [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" |] ;
       [| String "Row 1"   ; Num 1.         ; Num 10.        ; Num 9.5        ; Num 24.        |] ;
       [| String "Row 2"   ; Num 23.        ; Num 12.        ; Num 0.5        ; Num 35.        |] ;
@@ -140,10 +140,38 @@ let range_bound_test () =
     [| "" ;            "" ; "" ; "=(C3-(B3/(1.+1.)))" ;                "" |] ;
     [| "" ;            "" ; "" ; "=(C4-(B4/(1.+1.)))" ;                "" |] ;
     [| "" ;            "" ; "" ; "=(C5-(B5/(1.+1.)))" ;                "" |] ;
-    [| "" ;            "" ; "" ; ""                   ;                "" |] ;
+    [| "" ;            "" ; "" ;                   "" ;                "" |] ;
     [| "" ;            "" ; "" ; "=(C7-(B7/(1.+1.)))" ;                "" |] ;
     [| "" ;            "" ; "" ; "=(C8-(B8/(1.+1.)))" ;                "" |] ;
     [| "" ; "=SUM(B2:B8)" ; "" ; "=(C9-(B9/(1.+1.)))" ; "=AVERAGE(E2:E8)" |] ;
+  |] in test_matrix expected result
+
+let large_constant_test () =
+  let result = run_on_values {
+    constants = [] ;
+    data = Matrix.Offsetted.create Value.[|
+      [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" ; String "Col 5" |] ;
+      [| String "Row 1"   ; Num 1.         ; Num 10.        ; Num 9.5        ; Num 24.        ;      Num 9500. |] ;
+      [| String "Row 2"   ; Num 23.        ; Num 12.        ; Num 0.5        ; Num 35.        ;       Num 500. |] ;
+      [| String "Row 3"   ; Num 22.        ; Num 2.         ; Num (-9.)      ; Num 23.        ;   Num (-9000.) |] ;
+      [| String "Row 4"   ; Num (-1.)      ; Num 6.         ; Num 6.5        ; Num 5.         ;      Num 6500. |] ;
+      [| String "Row 5"   ; Num 59.        ; String "?"     ; String "???"   ; Num 40.        ;   String "???" |] ;
+      [| String "Row 6"   ; Num 11.        ; Num (-2.)      ; Num (-7.5)     ; Num 9.         ;   Num (-7500.) |] ;
+      [| String "Row 7"   ; Num 0.         ; Num 44.        ; Num 44.        ; Num 18.        ;     Num 44000. |] ;
+      [| String "Row 9"   ; Num 115.       ; Num 36.        ; Num (-21.5)    ; Num 22.        ;  Num (-21500.) |] ;
+    |] ;
+    mask = None ;
+  }
+  and expected = [|
+    [| "" ;            "" ; "" ;                   "" ;                "" ;            "" |] ;
+    [| "" ;            "" ; "" ; "=(C2-(B2/(1.+1.)))" ;                "" ; "=(D2/0.001)" |] ;
+    [| "" ;            "" ; "" ; "=(C3-(B3/(1.+1.)))" ;                "" ; "=(D3/0.001)" |] ;
+    [| "" ;            "" ; "" ; "=(C4-(B4/(1.+1.)))" ;                "" ; "=(D4/0.001)" |] ;
+    [| "" ;            "" ; "" ; "=(C5-(B5/(1.+1.)))" ;                "" ; "=(D5/0.001)" |] ;
+    [| "" ;            "" ; "" ;                   "" ;                "" ;            "" |] ;
+    [| "" ;            "" ; "" ; "=(C7-(B7/(1.+1.)))" ;                "" ; "=(D7/0.001)" |] ;
+    [| "" ;            "" ; "" ; "=(C8-(B8/(1.+1.)))" ;                "" ; "=(D8/0.001)" |] ;
+    [| "" ; "=SUM(B2:B8)" ; "" ; "=(C9-(B9/(1.+1.)))" ; "=AVERAGE(E2:E8)" ; "=(D9/0.001)" |] ;
   |] in test_matrix expected result
 
 let all = [
@@ -152,4 +180,5 @@ let all = [
   "Last row aggregation operations",      `Quick, last_row_aggregate_test ;
   "Noisy data: row and column headings",  `Quick, headings_test ;
   "Synthesis restricted to a range",      `Quick, range_bound_test ;
+  "Inference of large constants",         `Quick, large_constant_test ;
 ]

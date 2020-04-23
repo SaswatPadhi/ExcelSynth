@@ -21,7 +21,9 @@ let ( -*- ) (from : Expr.component list) (comps : Expr.component list) =
 module Config = struct
   type t = {
     components_per_level : Expr.component list array ;
+    abort_on_constant_solutions : bool ;
     disable_constant_solutions : bool ;
+    large_constant_inference : bool ;
     max_expressiveness_level : int ;
     order : int -> int -> float ;
     size_limit : int ;
@@ -31,7 +33,9 @@ module Config = struct
 
   let default : t = {
     components_per_level = NumComponents.no_bool_levels ++ RangeComponents.levels ;
+    abort_on_constant_solutions = true ;
     disable_constant_solutions = true ;
+    large_constant_inference = true ;
     max_expressiveness_level = 1024 ;
     order = (fun g_cost e_cost -> (Int.to_float e_cost) *. (Float.log (Int.to_float g_cost))) ;
     size_limit = 9 ;
@@ -150,18 +154,18 @@ let solve_impl (config : Config.t) (task : task) =
         then ignore (DList.insert_last candidates_set.(level).(cost) candidate)
    in
 
+  let make_constant_candidate value : Expr.synthesized = {
+    expr = Expr.Constant value;
+    outputs = Array.create ~len:(Array.length task.outputs) value;
+  } in
+
   let constants = Value.(
     List.dedup_and_sort ~compare
        ( Value.[ Num 0. ; Num 1. ; Bool true ; Bool false ]
        @ (List.map task.constants ~f:(function Num x -> Num (Float.abs x) | x -> x))))
-  and add_constant_candidate value =
-    let candidate : Expr.synthesized = {
-      expr = Expr.Constant value;
-      outputs = Array.create ~len:(Array.length task.outputs) value;
-    } in add_candidate (typed_candidates (Value.typeof value)) 0 1 candidate
    in
 
-  List.(iter (rev constants) ~f:add_constant_candidate) ;
+  List.(iter (rev constants) ~f:(fun c -> add_candidate (typed_candidates (Value.typeof c)) 0 1 (make_constant_candidate c))) ;
 
   List.iteri task.inputs
              ~f:(fun i input -> try add_candidate (typed_candidates (Value.majority_type input)) 0 1
@@ -172,18 +176,47 @@ let solve_impl (config : Config.t) (task : task) =
   ;
 
   let typed_value_equal = Value.(fun v1 v2 -> not (Type.equal (typeof v2) (typeof v1)) || equal v1 v2) in
-  let check (candidate : Expr.synthesized) =
+  let rec check ?(large_constant_inference = true) (candidate : Expr.synthesized) =
     let length = ref 0. in
     let mismatches = Array.fold2_exn task.outputs candidate.outputs ~init:0.
                                      ~f:(fun acc v1 v2 -> length := !length +. 1.
                                                         ; if typed_value_equal v1 v2 then acc else acc +. 1.)
-     in Log.debug (lazy ("     %-- value mismatches = " ^ Float.(to_string mismatches)
-                              ^ "/" ^ Float.(to_string !length) ^ " :"))
-      ; if Float.(mismatches <= config.value_mismatch_threshold *. !length)
-        then if config.disable_constant_solutions && Expr.is_constant candidate.expr
-             then raise (IgnoredSolution candidate)
-             else raise (Success candidate)
+     in Log.debug (lazy ("     %-- value mismatches = " ^ Float.(to_string mismatches) ^
+                         "/" ^ Float.(to_string !length) ^ " :"))
+      ; begin
+          if Float.(mismatches <= config.value_mismatch_threshold *. !length)
+          then (
+            if config.disable_constant_solutions && Expr.is_constant candidate.expr
+            then (
+              if config.abort_on_constant_solutions then raise (IgnoredSolution candidate)
+            ) else raise (Success candidate)
+          )
+        end
+      ; begin
+          if large_constant_inference
+          then let apply = Expr.apply ~type_mismatch_threshold:config.type_mismatch_threshold in
+               let is_trivial f = Caml.Float.is_integer f && Float.(abs f < 5.) in
+               let rec process index =
+                 if index < Array.length candidate.outputs && index < Array.length task.outputs then
+                 match candidate.outputs.(index), task.outputs.(index) with
+                 | Value.Num i , Value.Num o
+                   -> begin
+                        if not (is_trivial (i -. o)) then
+                        let diff_candidate = make_constant_candidate (Value.Num (i -. o)) in
+                        let new_candidate = apply NumComponents.subtraction [ candidate ; diff_candidate ]
+                         in Option.iter new_candidate ~f:(check ~large_constant_inference:false)
+                      end
+                    ; begin
+                        if not (Float.equal o 0.) && not (is_trivial (i /. o)) then
+                        let ratio_candidate = make_constant_candidate (Value.Num (i /. o)) in
+                        let new_candidate = apply NumComponents.division [ candidate ; ratio_candidate ]
+                         in Option.iter new_candidate ~f:(check ~large_constant_inference:false)
+                      end
+                 | _ , _ -> process (index + 1)
+                in process 0
+        end
    in
+  let check = check ~large_constant_inference:config.large_constant_inference in
 
   let task_codomain = Value.majority_type task.outputs in
 

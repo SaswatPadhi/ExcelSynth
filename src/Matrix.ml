@@ -27,13 +27,18 @@ module Offsetted = struct
   [@@inline always]
 
   let top_left ((Offsetted (_ , tl , _ , _)) : 'a T.t) : int * int = tl
+  [@@inline always]
 
   let bottom_right ((Offsetted (_ , _ , br , _)) : 'a T.t) : int * int = br
+  [@@inline always]
 
   include T
 end
 
 module Infix = struct
-  let ( !> ) (m : 'a Offsetted.t) = Offsetted.submatrix m [@@inline always]
-  let ( !! ) ((Offsetted (mat , _ , _, _)) : 'a Offsetted.t) = mat [@@inline always]
+  let ( !> ) (m : 'a Offsetted.t) = Offsetted.submatrix m
+  [@@inline always]
+
+  let ( !! ) ((Offsetted (mat , _ , _, _)) : 'a Offsetted.t) = mat
+  [@@inline always]
 end

@@ -144,12 +144,12 @@ let apply_row_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t) ~
       in "=" ^ (Expr.to_string (Array.of_list_rev cells) e)
    in match col_mask with
       | None -> (function None -> ()
-                        | Some res -> Array.iteri !>mask.(0) ~f:(fun c _ -> if not Value.(equal res.outputs.(c) Error)
+                        | Some res -> Array.iteri !>mask.(0) ~f:(fun c _ -> if Type.(equal NUM (Value.typeof res.outputs.(c)))
                                                                             then !>mask.(r).(c) <- row_formula c res.expr))
       | Some cm -> (function
                     | None -> ()
                     | Some res -> let i = ref (-1)
-                                   in Array.iteri !>mask.(0) ~f:(fun c _ -> if cm.(c) && (Int.incr i ; not Value.(equal res.outputs.(!i) Error))
+                                   in Array.iteri !>mask.(0) ~f:(fun c _ -> if cm.(c) && (Int.incr i ; Type.(equal NUM (Value.typeof res.outputs.(!i))))
                                                                             then !>mask.(r).(c) <- row_formula c res.expr))
 
 let apply_col_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t) ~(row_mask : bool array option)
@@ -162,12 +162,12 @@ let apply_col_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t) ~
       in "=" ^ (Expr.to_string (Array.of_list_rev cells) e)
    in match row_mask with
       | None -> (function None -> ()
-                        | Some res -> Array.iteri !>mask ~f:(fun r _ -> if not Value.(equal res.outputs.(r) Error)
+                        | Some res -> Array.iteri !>mask ~f:(fun r _ -> if Type.(equal NUM (Value.typeof res.outputs.(r)))
                                                                         then !>mask.(r).(c) <- col_formula r res.expr))
       | Some rm -> (function
                     | None -> ()
                     | Some res -> let i = ref (-1)
-                                   in Array.iteri !>mask ~f:(fun r _ -> if rm.(r) && (Int.incr i ; not Value.(equal res.outputs.(!i) Error))
+                                   in Array.iteri !>mask ~f:(fun r _ -> if rm.(r) && (Int.incr i ; Type.(equal NUM (Value.typeof res.outputs.(!i))))
                                                                         then !>mask.(r).(c) <- col_formula r res.expr))
 
 let apply_range_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t)
@@ -221,24 +221,32 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
       and apply_col_formula = apply_col_formula ~config ~mask
       and apply_range_formula = apply_range_formula ~config ~mask in
       let solver problem =
-        try Some (Synthesizer.solve ~config:config._Synthesizer problem)
-        with Exceptions.NoSuchFunction -> None
+        let config = config._Synthesizer
+         in try Some (Synthesizer.solve ~config problem)
+            with Exceptions.NoSuchFunction -> None
+      and agg_solver problem =
+        let config = {
+          config._Synthesizer with
+          abort_on_constant_solutions = false ;
+          large_constant_inference = false
+        } in try Some (Synthesizer.solve ~config problem)
+             with Exceptions.NoSuchFunction -> None
        in
           Lwt_preemptive.(simple_init () ; set_bounds (0, config.max_threads) ; set_max_number_of_threads_queued 1024)
         ; (if config.last_row_aggregate && rlen > 3
-           then (Log.info (lazy "----< LAST ROW AGGREGATE >----") ; Log.push_indent () ;
+           then (Log.info (lazy "----< ROW AGGREGATES >----") ; Log.push_indent () ;
                  match Array.(findi !>(task.data) ~f:(fun r _ -> exists !>(task.data).(rlen-r-1) ~f:(fun c -> Type.(equal NUM (Value.typeof c))))) with
                  | Some (r, _) when rlen - r > 4
                    -> let last_row = rlen - r - 1
                        in Lwt_main.run (
                             Lwt_list.iter_p (fun c -> if String.is_empty !>mask.(last_row).(c)
-                                                      then let work () = apply_range_formula last_row c (solver (make_range_problem last_row c))
+                                                      then let work () = apply_range_formula last_row c (agg_solver (make_range_problem last_row c))
                                                             in Lwt_preemptive.detach work ()
                                                       else Lwt.return ())
                                             (List.range 0 clen))
                         ; Log.pop_indent ()
                  | _ -> ())
-           else Log.info (lazy "LAST ROW AGGREGATE SKIPPED!"))
+           else Log.info (lazy "ROW AGGREGATES SKIPPED!"))
         ; (if config.col_pointwise
            then (Log.info (lazy "----< COL POINTWISE >----") ; Log.push_indent () ;
                  Lwt_main.run (
@@ -249,19 +257,19 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
                  Log.pop_indent ())
            else Log.info (lazy "COL POINTWISE SKIPPED!"))
         ; (if config.last_col_aggregate && clen > 3
-           then (Log.info (lazy "----< LAST COL AGGREGATE >----") ; Log.push_indent () ;
+           then (Log.info (lazy "----< COL AGGREGATES >----") ; Log.push_indent () ;
                  match Array.(findi !>(task.data).(0) ~f:(fun c _ -> exists !>(task.data) ~f:(fun r -> Type.(equal NUM (Value.typeof r.(clen-c-1)))))) with
                  | Some (c, _) when clen - c > 4
                    -> let last_col = clen - c - 1
                        in Lwt_main.run (
                             Lwt_list.iter_p (fun r -> if String.is_empty !>mask.(r).(last_col)
-                                                      then let work () = apply_range_formula r last_col (solver (make_range_problem r last_col))
+                                                      then let work () = apply_range_formula r last_col (agg_solver (make_range_problem r last_col))
                                                             in Lwt_preemptive.detach work ()
                                                       else Lwt.return ())
                                             (List.range 0 rlen))
                         ; Log.pop_indent ()
                  | _ -> ())
-           else Log.info (lazy "LAST COL AGGREGATE SKIPPED!"))
+           else Log.info (lazy "COL AGGREGATES SKIPPED!"))
         ; (if config.row_pointwise
            then (Log.info (lazy "----< ROW POINTWISE >----") ; Log.push_indent () ;
                  Lwt_main.run (
