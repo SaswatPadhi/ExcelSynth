@@ -9,6 +9,8 @@ module Config = struct
     col_pointwise : bool ;
     last_col_aggregate : bool ;
     last_row_aggregate : bool ;
+    max_aggregate_size : int ;
+    max_pointwise_size : int ;
     max_threads : int ;
     row_pointwise : bool ;
     top_left_only : bool ;
@@ -20,6 +22,8 @@ module Config = struct
     col_pointwise = true ;
     last_col_aggregate = true ;
     last_row_aggregate = true ;
+    max_aggregate_size = 8 ;
+    max_pointwise_size = 9 ;
     max_threads = 1 ;
     row_pointwise = false ;
     top_left_only = true ;
@@ -135,7 +139,7 @@ let make_range_problem ~(config : Config.t) (task : Value.t task) (r : int) (c :
       }
 
 let apply_row_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t) ~(col_mask : bool array option)
-                      (r : int) : (Expr.synthesized option -> unit) =
+                      (r : int) : (Synthesizer.result option -> unit) =
   let ot , ol = Matrix.Offsetted.top_left mask in
   let row_formula (c : int) (e : Expr.t) : string =
     let cells = Array.(foldi !>mask ~init:[]
@@ -153,7 +157,7 @@ let apply_row_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t) ~
                                                                             then !>mask.(r).(c) <- row_formula c res.expr))
 
 let apply_col_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t) ~(row_mask : bool array option)
-                      (c : int) : (Expr.synthesized option -> unit) =
+                      (c : int) : (Synthesizer.result option -> unit) =
   let ot , ol = Matrix.Offsetted.top_left mask in
   let col_formula (r : int) (e : Expr.t) : string =
     let cells = Array.(foldi !>mask.(0) ~init:[]
@@ -171,7 +175,7 @@ let apply_col_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t) ~
                                                                         then !>mask.(r).(c) <- col_formula r res.expr))
 
 let apply_range_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t)
-                        (r : int) (c : int) : (Expr.synthesized option -> unit) =
+                        (r : int) (c : int) : (Synthesizer.result option -> unit) =
   let ot , ol = Matrix.Offsetted.top_left mask in
   let rlen = Array.length !>mask and clen = Array.length !>mask.(0) in
   let range_formula (e : Expr.t) : string =
@@ -221,20 +225,23 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
       and apply_col_formula = apply_col_formula ~config ~mask
       and apply_range_formula = apply_range_formula ~config ~mask in
       let solver problem =
-        let config = config._Synthesizer
-         in try Some (Synthesizer.solve ~config problem)
-            with Exceptions.NoSuchFunction -> None
+        let config = {
+          config._Synthesizer with
+          size_limit = config.max_pointwise_size
+        } in try Some (Synthesizer.solve ~config problem)
+             with Exceptions.NoSuchFunction -> None
       and agg_solver problem =
         let config = {
           config._Synthesizer with
           abort_on_constant_solutions = false ;
-          large_constant_inference = false
+          size_limit = config.max_aggregate_size ;
+          large_constant_threshold = -1
         } in try Some (Synthesizer.solve ~config problem)
              with Exceptions.NoSuchFunction -> None
        in
           Lwt_preemptive.(simple_init () ; set_bounds (0, config.max_threads) ; set_max_number_of_threads_queued 1024)
         ; (if config.last_row_aggregate && rlen > 3
-           then (Log.info (lazy "----< ROW AGGREGATES >----") ; Log.push_indent () ;
+           then (Log.empty_line () ; Log.info (lazy "----< ROW AGGREGATES >----") ; Log.push_indent () ;
                  match Array.(findi !>(task.data) ~f:(fun r _ -> exists !>(task.data).(rlen-r-1) ~f:(fun c -> Type.(equal NUM (Value.typeof c))))) with
                  | Some (r, _) when rlen - r > 4
                    -> let last_row = rlen - r - 1
@@ -248,7 +255,7 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
                  | _ -> ())
            else Log.info (lazy "ROW AGGREGATES SKIPPED!"))
         ; (if config.col_pointwise
-           then (Log.info (lazy "----< COL POINTWISE >----") ; Log.push_indent () ;
+           then (Log.empty_line () ; Log.info (lazy "----< COL POINTWISE >----") ; Log.push_indent () ;
                  Lwt_main.run (
                    Lwt_list.iter_p (fun c -> let row_mask = Some (Array.map !>mask ~f:(fun row -> String.is_empty row.(c))) in
                                              let work () = apply_col_formula ~row_mask c (solver (make_pointwise_col_problem ~row_mask c))
@@ -257,7 +264,7 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
                  Log.pop_indent ())
            else Log.info (lazy "COL POINTWISE SKIPPED!"))
         ; (if config.last_col_aggregate && clen > 3
-           then (Log.info (lazy "----< COL AGGREGATES >----") ; Log.push_indent () ;
+           then (Log.empty_line () ; Log.info (lazy "----< COL AGGREGATES >----") ; Log.push_indent () ;
                  match Array.(findi !>(task.data).(0) ~f:(fun c _ -> exists !>(task.data) ~f:(fun r -> Type.(equal NUM (Value.typeof r.(clen-c-1)))))) with
                  | Some (c, _) when clen - c > 4
                    -> let last_col = clen - c - 1
@@ -271,7 +278,7 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
                  | _ -> ())
            else Log.info (lazy "COL AGGREGATES SKIPPED!"))
         ; (if config.row_pointwise
-           then (Log.info (lazy "----< ROW POINTWISE >----") ; Log.push_indent () ;
+           then (Log.empty_line () ; Log.info (lazy "----< ROW POINTWISE >----") ; Log.push_indent () ;
                  Lwt_main.run (
                    Lwt_list.iter_p (fun r -> let col_mask = Some (Array.map !>mask.(r) ~f:String.is_empty) in
                                              let work () = apply_row_formula ~col_mask r (solver (make_pointwise_row_problem ~col_mask r))

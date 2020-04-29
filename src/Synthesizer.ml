@@ -23,11 +23,11 @@ module Config = struct
     components_per_level : Expr.component list array ;
     abort_on_constant_solutions : bool ;
     disable_constant_solutions : bool ;
-    large_constant_inference : bool ;
+    large_constant_threshold : int ;
     max_expressiveness_level : int ;
     order : int -> int -> float ;
     size_limit : int ;
-    type_mismatch_threshold : float ;
+    arg_type_mismatch_threshold : float ;
     value_mismatch_threshold : float ;
   }
 
@@ -35,11 +35,11 @@ module Config = struct
     components_per_level = NumComponents.no_bool_levels ++ RangeComponents.levels ;
     abort_on_constant_solutions = true ;
     disable_constant_solutions = true ;
-    large_constant_inference = true ;
+    large_constant_threshold = 5 ;
     max_expressiveness_level = 1024 ;
     order = (fun g_cost e_cost -> (Int.to_float e_cost) *. (Float.log (Int.to_float g_cost))) ;
     size_limit = 9 ;
-    type_mismatch_threshold = 0.333333 ;
+    arg_type_mismatch_threshold = 0.6 ;
     value_mismatch_threshold = 0.05 ;
   }
 end
@@ -50,8 +50,13 @@ type task = {
   constants : Value.t list ;
 }
 
-exception Success of Expr.synthesized
-exception IgnoredSolution of Expr.synthesized
+type result = {
+  expr : Expr.t ;
+  outputs : Value.t array ;
+} [@@deriving sexp]
+
+exception Success of result
+exception IgnoredSolution of result
 
 module DList = Doubly_linked
 
@@ -115,7 +120,41 @@ module IntTuple = struct
   include Comparable.Make (T)
 end
 
+let create_candidate (comp : Expr.component) (args : result list) : result option =
+  let subexprs = List.map args ~f:(fun arg -> arg.expr)
+   in if not (comp.can_apply subexprs) then None
+      else try
+        let expr = Expr.Application (comp, subexprs)
+        and outputs = Array.mapi (List.hd_exn args).outputs
+                                 ~f:(fun i _ -> try comp.evaluate (List.map args ~f:(fun arg -> arg.outputs.(i)))
+                                                with Match_failure _ -> Value.Error)
+         in Some { expr ; outputs }
+      with Internal_Exn _ as e -> raise e
+         | e -> None
+
+let arg_type_check_candidate ?(arg_type_mismatch_threshold = 0.) (candidate : result) : bool =
+  let mismatches = ref 0. and length = ref 0.
+   in Array.iteri candidate.outputs
+                  ~f:(fun i v -> length := !length +. 1.
+                               ; if Value.(equal v Error) then mismatches := !mismatches +. 1.)
+    ; Log.debug (lazy ("    @ arg-type mismatches = " ^ Int.(to_string (of_float !mismatches))
+                                  ^ " / " ^ Int.(to_string (of_float !length)) ^ " :"))
+    ; Log.debug (lazy ("    + " ^ (Expr.to_string (Array.of_list_map (List.range 0 1024)
+                                                                     ~f:(fun i -> "v" ^ (Int.to_string i)))
+                                                  candidate.expr)))
+    ; Log.debug (lazy ("     `-- [| " ^ Array.(to_string_map candidate.outputs ~sep:" ; " ~f:Value.to_string) ^ " |]"))
+    ; Float.(!mismatches <= arg_type_mismatch_threshold *. !length)
+
+let create_and_arg_type_check_candidate ?(arg_type_mismatch_threshold = 0.) (comp : Expr.component) (args : result list)
+                                    : result option =
+  match create_candidate comp args with
+  | None -> None
+  | Some candidate -> if Float.(arg_type_check_candidate ~arg_type_mismatch_threshold candidate)
+                      then Some candidate
+                      else None
+
 let solve_impl (config : Config.t) (task : task) =
+  let task_codomain = Value.majority_type task.outputs in
   let typed_components t_type = Array.append
     (Array.create ~len:1 [])
     (Array.mapi (Array.init (Int.min config.max_expressiveness_level (Array.length config.components_per_level))
@@ -147,14 +186,14 @@ let solve_impl (config : Config.t) (task : task) =
    in
 
   let seen_outputs = ref (Set.empty (module Output)) in
-  let add_candidate candidates_set level cost (candidate : Expr.synthesized) =
+  let add_candidate candidates_set level cost (candidate : result) =
     let old_size = Set.length !seen_outputs
      in seen_outputs := Set.add !seen_outputs candidate.outputs
       ; if (Set.length !seen_outputs) <> old_size
         then ignore (DList.insert_last candidates_set.(level).(cost) candidate)
    in
 
-  let make_constant_candidate value : Expr.synthesized = {
+  let make_constant_candidate value : result = {
     expr = Expr.Constant value;
     outputs = Array.create ~len:(Array.length task.outputs) value;
   } in
@@ -165,24 +204,15 @@ let solve_impl (config : Config.t) (task : task) =
        @ (List.map task.constants ~f:(function Num x -> Num (Float.abs x) | x -> x))))
    in
 
-  List.(iter (rev constants) ~f:(fun c -> add_candidate (typed_candidates (Value.typeof c)) 0 1 (make_constant_candidate c))) ;
-
-  List.iteri task.inputs
-             ~f:(fun i input -> try add_candidate (typed_candidates (Value.majority_type input)) 0 1
-                                                  { expr = Expr.Variable i ; outputs = input }
-                                with NoMajorityType -> Log.debug (lazy ("     `-- Ignoring input v"
-                                                                       ^ (Int.to_string i)
-                                                                       ^ ": No majority type found!")))
-  ;
-
-  let typed_value_equal = Value.(fun v1 v2 -> not (Type.equal (typeof v2) (typeof v1)) || equal v1 v2) in
-  let rec check ?(large_constant_inference = true) (candidate : Expr.synthesized) =
+  let typed_value_equal = Value.(fun v1 v2 -> equal v2 Error || equal v1 v2) in
+  let rec check ?(large_constant_inference = true) (candidate : result) =
+    if Array.(length task.outputs <> length candidate.outputs) then () ;
     let length = ref 0. in
     let mismatches = Array.fold2_exn task.outputs candidate.outputs ~init:0.
                                      ~f:(fun acc v1 v2 -> length := !length +. 1.
                                                         ; if typed_value_equal v1 v2 then acc else acc +. 1.)
-     in Log.debug (lazy ("     %-- value mismatches = " ^ Float.(to_string mismatches) ^
-                         "/" ^ Float.(to_string !length) ^ " :"))
+     in Log.debug (lazy ("         (value mismatches = " ^ Int.(to_string (of_float mismatches)) ^
+                         " / " ^ Int.(to_string (of_float !length)) ^ ")"))
       ; begin
           if Float.(mismatches <= config.value_mismatch_threshold *. !length)
           then (
@@ -194,33 +224,60 @@ let solve_impl (config : Config.t) (task : task) =
         end
       ; begin
           if large_constant_inference
-          then let apply = Expr.apply ~type_mismatch_threshold:config.type_mismatch_threshold in
-               let is_trivial f = Caml.Float.is_integer f && Float.(abs f < 5.) in
+          then let apply = create_and_arg_type_check_candidate ~arg_type_mismatch_threshold:config.arg_type_mismatch_threshold in
+               let is_trivial f = (Caml.Float.is_integer f) && Float.(abs f < (of_int config.large_constant_threshold)) in
                let rec process index =
                  if index < Array.length candidate.outputs && index < Array.length task.outputs then
                  match candidate.outputs.(index), task.outputs.(index) with
                  | Value.Num i , Value.Num o
                    -> begin
-                        if not (is_trivial (i -. o)) then
-                        let diff_candidate = make_constant_candidate (Value.Num (i -. o)) in
-                        let new_candidate = apply NumComponents.subtraction [ candidate ; diff_candidate ]
-                         in Option.iter new_candidate ~f:(check ~large_constant_inference:false)
+                        let d = i -. o
+                         in if not (is_trivial d)
+                            then Option.iter ~f:(check ~large_constant_inference:false)
+                                             (if Float.(d > 0.)
+                                              then let diff_candidate = make_constant_candidate (Value.Num d)
+                                                    in apply NumComponents.subtraction [ candidate ; diff_candidate ]
+                                              else let diff_candidate = make_constant_candidate (Value.Num (0. -. d))
+                                                    in apply NumComponents.addition [ candidate ; diff_candidate ])
                       end
                     ; begin
-                        if not (Float.equal o 0.) && not (is_trivial (i /. o)) then
-                        let ratio_candidate = make_constant_candidate (Value.Num (i /. o)) in
-                        let new_candidate = apply NumComponents.division [ candidate ; ratio_candidate ]
-                         in Option.iter new_candidate ~f:(check ~large_constant_inference:false)
+                        let r = i /. o
+                         in if not (Float.equal o 0.) && not (is_trivial r)
+                            then Option.iter ~f:(check ~large_constant_inference:false)
+                                             (if Float.(r > 1.)
+                                              then let ratio_candidate = make_constant_candidate (Value.Num r)
+                                                    in apply NumComponents.division [ candidate ; ratio_candidate ]
+                                              else let ratio_candidate = make_constant_candidate (Value.Num (1. /. r))
+                                                    in apply NumComponents.multiplication [ candidate ; ratio_candidate ])
                       end
                  | _ , _ -> process (index + 1)
                 in process 0
         end
    in
-  let check = check ~large_constant_inference:config.large_constant_inference in
 
-  let task_codomain = Value.majority_type task.outputs in
+  Log.debug (lazy ("  > Checking constants and identity expressions :")) ;
 
-  DList.iter ~f:check (typed_candidates task_codomain).(0).(1) ;
+  List.(iter (rev constants)
+             ~f:(fun c -> let candidate = make_constant_candidate c
+                           in if arg_type_check_candidate ~arg_type_mismatch_threshold:config.arg_type_mismatch_threshold candidate
+                              then begin
+                                add_candidate (typed_candidates (Value.typeof c)) 0 1 candidate ;
+                                check ~large_constant_inference:false candidate
+                              end))
+  ;
+
+  List.iteri task.inputs
+             ~f:(fun i input -> let candidate = { expr = Expr.Variable i ; outputs = input }
+                                 in if arg_type_check_candidate ~arg_type_mismatch_threshold:config.arg_type_mismatch_threshold candidate
+                                    then try
+                                      add_candidate (typed_candidates (Value.majority_type input)) 0 1 candidate ;
+                                      check ~large_constant_inference:(config.large_constant_threshold >= 0) candidate
+                                    with NoMajorityType -> Log.debug (lazy ("       (ignoring input v"
+                                                                           ^ (Int.to_string i)
+                                                                           ^ ": no majority type found!)")))
+  ;
+
+  let check = check ~large_constant_inference:(config.large_constant_threshold >= 0) in
 
   let apply_component op_level expr_level cost domain applier =
     let rec apply_cells acc domain locations =
@@ -234,7 +291,7 @@ let solve_impl (config : Config.t) (task : task) =
    in
   let expand_component op_level expr_level cost candidates (component : Expr.component) =
     let applier args =
-      match Expr.apply ~type_mismatch_threshold:config.type_mismatch_threshold component args with
+      match create_and_arg_type_check_candidate ~arg_type_mismatch_threshold:config.arg_type_mismatch_threshold component args with
       | None -> ()
       | Some result
         -> let expr_cost = Expr.size result.expr
@@ -256,7 +313,7 @@ let solve_impl (config : Config.t) (task : task) =
   Log.debug (lazy ("    " ^ (List.to_string_map ordered_level_cost ~sep:" > "
                                                 ~f:(fun (l,c) -> "(G" ^ (Int.to_string l)
                                                                ^ "," ^ (Int.to_string c) ^ ")"))));
-  Log.debug (lazy ("  > Checking expressions:")) ;
+  Log.debug (lazy ("  > Checking larger expressions:")) ;
 
   let seen_level_cost = ref (Set.empty (module IntTuple)) in
   List.iter ordered_level_cost
@@ -277,7 +334,8 @@ let solve_impl (config : Config.t) (task : task) =
                                      ~f:(fun (cands, comps)
                                            -> iter comps ~f:(expand_component l level cost cands)))))
 
-let solve ?(config = Config.default) (task : task) : Expr.synthesized =
+let solve ?(config = Config.default) (task : task) : result =
+  Log.debug (lazy "") ;
   Log.debug (lazy ("Starting hybrid enumeration:")) ;
   Log.debug (lazy ("  > Output:")) ;
   Log.debug (lazy ("    [ " ^ (Array.to_string_map task.outputs ~sep:" ; " ~f:Value.to_string) ^ " ]")) ;

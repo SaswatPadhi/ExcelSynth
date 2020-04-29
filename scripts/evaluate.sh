@@ -38,11 +38,11 @@ mkdir -p "$EXTRACTED_MASKS_DIR"
 RECOVERED_MASKS_DIR="$DATA_DIR/recovered_masks"
 mkdir -p "$RECOVERED_MASKS_DIR"
 
-FULL_COMPARISON_MAKS_DIR="$DATA_DIR/comparison_masks/full"
-mkdir -p "$FULL_COMPARISON_MAKS_DIR"
+FULL_COMPARISON_MASKS_DIR="$DATA_DIR/comparison_masks/full"
+mkdir -p "$FULL_COMPARISON_MASKS_DIR"
 
-TABLE_COMPARISON_MAKS_DIR="$DATA_DIR/comparison_masks/in-table"
-mkdir -p "$TABLE_COMPARISON_MAKS_DIR"
+TABLE_COMPARISON_MASKS_DIR="$DATA_DIR/comparison_masks/in-table"
+mkdir -p "$TABLE_COMPARISON_MASKS_DIR"
 
 
 recreate_dir() {
@@ -59,38 +59,39 @@ TABLE_RANGES_HEADER=$(head -n 1 "$TABLE_RANGES_FILE")
 IFS=',' read -ra TABLE_SOURCES <<< "$TABLE_RANGES_HEADER"
 TABLE_SOURCES=("${TABLE_SOURCES[@]:1}")
 
-recreate_dir "$FULL_COMPARISON_MAKS_DIR/Baseline"
-recreate_dir "$TABLE_COMPARISON_MAKS_DIR/Baseline"
+recreate_dir "$FULL_COMPARISON_MASKS_DIR/Baseline"
 recreate_dir "$RECOVERED_MASKS_DIR/Baseline"
 
 "$RECOVER_MASK" -e "$EVALUATED_CSVS_DIR" \
                 -o "$RECOVERED_MASKS_DIR/Baseline" \
                 -c "-1" \
-                "$TABLE_RANGES_FILE"
+                "$TABLE_RANGES_FILE" \
+  |& tee "$DATA_DIR/formula_recovery_Baseline.log"
 "$COMPARE_MASKS" -g "$EXTRACTED_MASKS_DIR" \
                  -p "$RECOVERED_MASKS_DIR/Baseline" \
-                 -o "$FULL_COMPARISON_MAKS_DIR/Baseline" \
-  | tee "$DATA_DIR/full_formula_recovery_Baseline.csv"
+                 -o "$FULL_COMPARISON_MASKS_DIR/Baseline" \
+  | tee "$DATA_DIR/full_comparison_Baseline.csv"
 
 for i in "${!TABLE_SOURCES[@]}"; do
   TABLE_SOURCE=$(echo "${TABLE_SOURCES[$i]}" | sed 's/ *$//g')
 
-  recreate_dir "$FULL_COMPARISON_MAKS_DIR/$TABLE_SOURCE"
-  recreate_dir "$TABLE_COMPARISON_MAKS_DIR/$TABLE_SOURCE"
+  recreate_dir "$FULL_COMPARISON_MASKS_DIR/$TABLE_SOURCE"
+  recreate_dir "$TABLE_COMPARISON_MASKS_DIR/$TABLE_SOURCE"
   recreate_dir "$RECOVERED_MASKS_DIR/$TABLE_SOURCE"
 
   "$RECOVER_MASK" -e "$EVALUATED_CSVS_DIR" \
                   -o "$RECOVERED_MASKS_DIR/$TABLE_SOURCE" \
                   -c $((i+1)) \
-                  "$TABLE_RANGES_FILE"
+                  "$TABLE_RANGES_FILE" \
+    |& tee "$DATA_DIR/formula_recovery_$TABLE_SOURCE.log"
   "$COMPARE_MASKS" -g "$EXTRACTED_MASKS_DIR" \
                    -p "$RECOVERED_MASKS_DIR/$TABLE_SOURCE" \
-                   -o "$FULL_COMPARISON_MAKS_DIR/$TABLE_SOURCE" \
-  | tee "$DATA_DIR/full_formula_recovery_$TABLE_SOURCE.csv"
+                   -o "$FULL_COMPARISON_MASKS_DIR/$TABLE_SOURCE" \
+    | tee "$DATA_DIR/full_comparison_$TABLE_SOURCE.csv"
   "$COMPARE_MASKS" -g "$EXTRACTED_MASKS_DIR" \
                    -p "$RECOVERED_MASKS_DIR/$TABLE_SOURCE" \
-                   -o "$TABLE_COMPARISON_MAKS_DIR/$TABLE_SOURCE" \
+                   -o "$TABLE_COMPARISON_MASKS_DIR/$TABLE_SOURCE" \
                    -c $((i+1)) \
                    -t "$TABLE_RANGES_FILE" \
-  | tee "$DATA_DIR/table_formula_recovery_$TABLE_SOURCE.csv"
+    | tee "$DATA_DIR/in-table_comparison_$TABLE_SOURCE.csv"
 done

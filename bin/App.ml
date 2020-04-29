@@ -10,39 +10,45 @@ let config_flags =
     let aggregate_2d                = flag "enable-2d-aggregation"
                                            (optional_with_default Driver.Config.default.aggregate_2d bool)
                                            ~doc:"BOOLEAN use 2D ranges in aggregation operations"
-    and col_pointwise               = flag "check-pointwise-col-operations"
-                                           (optional_with_default Driver.Config.default.col_pointwise bool)
-                                           ~doc:"BOOLEAN synthesize pointwise transformations for columns"
-    and enable_booleans             = flag "enable-booleans"
-                                           (optional_with_default false bool)
-                                           ~doc:"BOOLEAN enable Boolean and conditional expressions"
-    and disable_constant_solutions  = flag "disable-constant-solutions"
-                                           (optional_with_default Driver.Config.default._Synthesizer.disable_constant_solutions bool)
-                                           ~doc:"BOOLEAN disable constant formulas (e.g. =0.0) for cells"
     and last_col_aggregate          = flag "check-last-col-aggregations"
                                            (optional_with_default Driver.Config.default.last_col_aggregate bool)
                                            ~doc:"BOOLEAN synthesize aggregation formulas for cells in the last column"
     and last_row_aggregate          = flag "check-last-row-aggregations"
                                            (optional_with_default Driver.Config.default.last_row_aggregate bool)
                                            ~doc:"BOOLEAN synthesize aggregation formulas for cells in the last row"
-    and max_threads                 = flag "max-threads"
-                                           (optional_with_default Driver.Config.default.max_threads int)
-                                           ~doc:"INTEGER maximum number of threads to create"
+    and col_pointwise               = flag "check-pointwise-col-operations"
+                                           (optional_with_default Driver.Config.default.col_pointwise bool)
+                                           ~doc:"BOOLEAN synthesize pointwise transformations for columns"
     and row_pointwise               = flag "check-pointwise-row-operations"
                                            (optional_with_default Driver.Config.default.row_pointwise bool)
                                            ~doc:"BOOLEAN synthesize pointwise transformations for rows"
+    and disable_constant_solutions  = flag "disable-constant-solutions"
+                                           (optional_with_default Driver.Config.default._Synthesizer.disable_constant_solutions bool)
+                                           ~doc:"BOOLEAN disable constant formulas (e.g. =0.0) for cells"
+    and enable_booleans             = flag "enable-booleans"
+                                           (optional_with_default false bool)
+                                           ~doc:"BOOLEAN enable Boolean and conditional expressions"
+    and large_constant_threshold    = flag "large-constant-threshold"
+                                           (optional_with_default Driver.Config.default._Synthesizer.large_constant_threshold int)
+                                           ~doc:"INTEGER threshold for identifying large constants (-1 to disable)"
+    and max_aggregate_size          = flag "max-aggregate-expr-size"
+                                           (optional_with_default Driver.Config.default.max_aggregate_size int)
+                                           ~doc:"INTEGER maximum AST size for aggregation formulas"
+    and max_pointwise_size          = flag "max-pointwise-expr-size"
+                                           (optional_with_default Driver.Config.default.max_pointwise_size int)
+                                           ~doc:"INTEGER maximum AST size for pointwise transformations"
+    and max_threads                 = flag "max-threads"
+                                           (optional_with_default Driver.Config.default.max_threads int)
+                                           ~doc:"INTEGER maximum number of threads to create"
     and relative_error              = flag "relative-error"
                                            (optional_with_default !Float.Approx.rel_error float)
                                            ~doc:"FLOAT the fractional relative error allowed in float comparisons"
-    and size_limit                  = flag "max-expr-size"
-                                           (optional_with_default Driver.Config.default._Synthesizer.size_limit int)
-                                           ~doc:"INTEGER maximum cost (AST size) of expressions to explore"
     and top_left_only               = flag "restrict-to-top-left-data"
                                            (optional_with_default Driver.Config.default.top_left_only bool)
                                            ~doc:"BOOLEAN only use data to the top left of a cell in formulas"
-    and type_mismatch_threshold     = flag "type-error-threshold"
-                                           (optional_with_default Driver.Config.default._Synthesizer.type_mismatch_threshold float)
-                                           ~doc:"FLOAT maximum fraction of cells that may be ignored due to type errors"
+    and arg_type_mismatch_threshold = flag "type-error-threshold"
+                                           (optional_with_default Driver.Config.default._Synthesizer.arg_type_mismatch_threshold float)
+                                           ~doc:"FLOAT maximum fraction of cells that may be ignored due to arg-type errors"
     and value_mismatch_threshold    = flag "value-error-threshold"
                                            (optional_with_default Driver.Config.default._Synthesizer.value_mismatch_threshold float)
                                            ~doc:"FLOAT maximum fraction of cells that may be ignored due to value errors"
@@ -57,15 +63,17 @@ let config_flags =
           col_pointwise ;
           last_col_aggregate ;
           last_row_aggregate ;
+          max_aggregate_size ;
+          max_pointwise_size ;
           max_threads ;
           row_pointwise ;
           top_left_only ;
           _Synthesizer = {
             Driver.Config.default._Synthesizer with
             components_per_level ;
+            large_constant_threshold ;
             disable_constant_solutions ;
-            size_limit ;
-            type_mismatch_threshold ;
+            arg_type_mismatch_threshold ;
             value_mismatch_threshold ;
           } ;
         } [@warning "-23"]

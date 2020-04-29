@@ -55,7 +55,7 @@ let rec to_string : t -> string = function
   | Bool b       -> String.uppercase (Bool.to_string b)
   | Error        -> "<error>"
   | Merged (x,y) -> "<m:" ^ (Excel.Cell.of_rc_ints x y) ^ ">"
-  | Num n        -> Float.to_string n
+  | Num n        -> Float.(if n < 0. then "(" ^ (to_string n) ^ ")" else to_string n)
   | String s     -> s
   | Range r
     -> "<range: "

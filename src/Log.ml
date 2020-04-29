@@ -8,6 +8,7 @@
   let info  _ = ()
   let debug _ = ()
 
+  let empty_line () = ()
   let push_indent () = ()
   let pop_indent () = ()
 
@@ -40,19 +41,22 @@
   let do_log level lstr =
     if should_log level
     then begin
-      Out_channel.fprintf
-        !log_chan
-        "%s  %s  %s%s\n"
-        Time.(to_string (now ()))
-        (level_str level)
-        (String.make !log_indent ' ')
-        (Lazy.force lstr)
+      let now_ns = Time_now.nanoseconds_since_unix_epoch ()
+       in Out_channel.fprintf
+            !log_chan
+            "%s.%3d  %s  %s%s\n"
+            Time.(format (now ()) "%d-%b-%y  %T" ~zone:(Lazy.force Zone.local))
+            Int63.(to_int_trunc ((now_ns / (of_int 100000)) % (of_int 10000)))
+            (level_str level)
+            (String.make !log_indent ' ')
+            (Lazy.force lstr)
     end
 
   let info lstr = do_log Info lstr
   let debug lstr = do_log Debug lstr
   let error lstr = do_log Error lstr
 
+  let empty_line () = do_log Info (lazy "")
   let push_indent () = log_indent := !log_indent + 2
   let pop_indent () = log_indent := !log_indent - 2
 
@@ -67,5 +71,4 @@
        ; info (lazy "")
        ; info (lazy msg)
        ; info (lazy (String.(make (128 - (length msg)) '=')))
-       ; info (lazy "")
 [%%endif]

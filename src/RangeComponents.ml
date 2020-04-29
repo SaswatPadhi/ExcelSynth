@@ -20,9 +20,7 @@ let light_aggregate = [
     codomain = Type.NUM;
     domain = Type.[RANGE];
     can_apply = (function _ -> true);
-    evaluate = Value.(function [@warning "-8"] [Range r]
-                      when (size r) > 4
-                      -> Num (range_sum r));
+    evaluate = Value.(function [@warning "-8"] [Range r] when (size r) > 4 -> Num (range_sum r));
     to_string = (fun [@warning "-8"] [a] -> "SUM(" ^ a ^ ")")
   }
 ]
@@ -33,8 +31,7 @@ let heavy_aggregate = light_aggregate @ [
     codomain = Type.NUM;
     domain = Type.[RANGE];
     can_apply = (function _ -> true);
-    evaluate = Value.(function [@warning "-8"] [Range r]
-                      when (size r) > 3
+    evaluate = Value.(function [@warning "-8"] [Range r] when (size r) > 3
                       -> Num ((range_sum r) /. (Float.of_int (size r))));
     to_string = (fun [@warning "-8"] [a] -> "AVERAGE(" ^ a ^ ")")
   }
@@ -46,8 +43,7 @@ let heavier_aggregate = heavy_aggregate @ [
     codomain = Type.NUM;
     domain = Type.[RANGE];
     can_apply = (function _ -> true);
-    evaluate = Value.(function [@warning "-8"] [Range r]
-                      when (size r) > 3
+    evaluate = Value.(function [@warning "-8"] [Range r] when (size r) > 3
                       -> let sz = Float.of_int (size r) in
                          let avg = (range_sum r) /. sz
                           in Num (Float.sqrt List.(

@@ -196,6 +196,10 @@ let no_bool_levels =
    in Array.map [| octagons ; polyhedra ; polynomials ; peano |]
                 ~f:List.(filter ~f:(fun c -> not (mem intervals c ~equal:cequal)))
 
+let addition = List.find_exn peano ~f:(fun c -> String.equal c.name "num-add")
+
 let subtraction = List.find_exn peano ~f:(fun c -> String.equal c.name "num-sub")
+
+let multiplication = List.find_exn peano ~f:(fun c -> String.equal c.name "num-lin-mult")
 
 let division = List.find_exn peano ~f:(fun c -> String.equal c.name "num-div")

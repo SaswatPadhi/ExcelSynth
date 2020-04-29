@@ -24,13 +24,13 @@ def dir_path(string):
     raise NotADirectoryError(string)
 
 def contains(col, row, tl, br):
-    return (tl[1] <= col <= br[1]) and (tl[0] <= row <= br[0])
+    return (tl[0] <= col <= br[0]) and (tl[1] <= row <= br[1])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-g', '--ground-truth-dir', type=dir_path, required=True)
     parser.add_argument('-p', '--prediction-dir', type=dir_path, required=True)
-    parser.add_argument('-o', '--pn-output-dir', type=dir_path, required=True)
+    parser.add_argument('-o', '--output-dir', type=dir_path, required=True)
     parser.add_argument('-c', '--table-range-column', type=int, required=False)
     parser.add_argument('-t', '--tables-data-csv', type=argparse.FileType('r'), required=False)
     args = parser.parse_args()
@@ -49,7 +49,7 @@ if __name__ == "__main__":
         for gt_path in sorted(args.ground_truth_dir.glob('*.csv')):
             todo[gt_path] = None
     else:
-        for i, row in enumerate(csv.reader(args.tables_data_csv)):
+        for row in csv.reader(args.tables_data_csv):
             gt_path = args.ground_truth_dir.joinpath(row[0].strip())
             if not gt_path.is_file():
                 continue
@@ -78,34 +78,35 @@ if __name__ == "__main__":
             with open(pred_path, 'r') as pred_file:
                 pred_csv = csv.reader(pred_file)
 
-                with open(args.pn_output_dir.joinpath(gt_path.name), 'w') as pn_mask_file:
-                    pn_mask_csv = csv.writer(pn_mask_file)
+                with open(args.output_dir.joinpath(gt_path.name), 'w') as output_mask_file:
+                    output_mask_csv = csv.writer(output_mask_file)
 
-                    row = 0
+                    row = -1
                     while True:
                         try:
-                            pn_row = []
+                            row += 1
+                            output_row = []
                             gt_row = next(gt_csv)
                             pred_row = next(pred_csv)
                             for col,(gt_cell,pred_cell) in enumerate(zip(gt_row,pred_row)):
                                 if tables is not None and not any(contains(col, row, *t) for t in tables):
-                                    pn_row.append('..')
+                                    output_row.append('XX')
                                     continue
 
-                                if gt_cell == '':
+                                if gt_cell == '' or '#REF!' in gt_cell or not any(c.isalpha() for c in gt_cell):
                                     if pred_cell != '':
                                         fp += 1
-                                        pn_row.append('FP')
+                                        output_row.append('FP')
                                     else:
-                                        pn_row.append('--')
+                                        output_row.append('--')
                                 else:
                                     if pred_cell == '':
                                         fn += 1
-                                        pn_row.append('FN')
+                                        output_row.append('FN')
                                     else:
                                         tp += 1
-                                        pn_row.append('TP')
-                            pn_mask_csv.writerow(pn_row)
+                                        output_row.append('TP')
+                            output_mask_csv.writerow(output_row)
                         except StopIteration:
                             break
 
