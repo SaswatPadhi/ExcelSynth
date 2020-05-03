@@ -90,7 +90,7 @@ let last_row_aggregate_test () =
     [| "=SUM(A1:A6)" ; "=(SUM(B1:B6)/(1.+1.))" ; "=(B7-(A7/(1.+1.)))" ; "=AVERAGE(D1:D6)" |] ;
   |] in test_matrix expected result
 
-let headings_test () =
+let noisy_headings_test () =
   let result = run_on_values {
     constants = [] ;
     data = Matrix.Offsetted.create Value.[|
@@ -115,7 +115,7 @@ let headings_test () =
     [| "" ;            "" ;                      "" ; "=(C6-(B6/(1.+1.)))" ;                "" |] ;
     [| "" ;            "" ;                      "" ; "=(C7-(B7/(1.+1.)))" ;                "" |] ;
     [| "" ;            "" ;                      "" ; "=(C8-(B8/(1.+1.)))" ;                "" |] ;
-    [| "" ; "=SUM(B2:B8)" ; "=(SUM(C2:C8)/(1.+1.))" ; "=(C9-(B9/(1.+1.)))" ; "=AVERAGE(E2:E8)" |] ;
+    [| "" ; "=SUM(B1:B8)" ; "=(SUM(C1:C8)/(1.+1.))" ; "=(C9-(B9/(1.+1.)))" ; "=AVERAGE(E1:E8)" |] ;
   |] in test_matrix expected result
 
 let range_bound_test () =
@@ -125,7 +125,7 @@ let range_bound_test () =
       [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" |] ;
       [| String "Row 1"   ; Num 1.         ; Num 10.        ; Num 9.5        ; Num 24.        |] ;
       [| String "Row 2"   ; Num 23.        ; Num 12.        ; Num 0.5        ; Num 35.        |] ;
-      [| String "Row 3"   ; Num 22.        ; Num 2.         ; Num (-9.)      ; Num 23.        |] ;
+      [| String "Row 3"   ; Num 22.        ; Num 222.       ; Num 211.       ; Num 23.        |] ;
       [| String "Row 4"   ; Num (-1.)      ; Num 6.         ; Num 6.5        ; Num 5.         |] ;
       [| String "Row 5"   ; Num 59.        ; String "?"     ; String "???"   ; Num 40.        |] ;
       [| String "Row 6"   ; Num 11.        ; Num (-2.)      ; Num (-7.5)     ; Num 9.         |] ;
@@ -151,14 +151,14 @@ let large_constant_test () =
     constants = [] ;
     data = Matrix.Offsetted.create Value.[|
       [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" ; String "Col 5" |] ;
-      [| String "Row 1"   ; Num 1.         ; Num 10.        ; Num 9.5        ; Num 24.        ;      Num 9500. |] ;
-      [| String "Row 2"   ; Num 23.        ; Num 12.        ; Num 0.5        ; Num 35.        ;       Num 500. |] ;
-      [| String "Row 3"   ; Num 22.        ; Num 2.         ; Num (-9.)      ; Num 23.        ;   Num (-9000.) |] ;
-      [| String "Row 4"   ; Num (-1.)      ; Num 6.         ; Num 6.5        ; Num 5.         ;      Num 6500. |] ;
-      [| String "Row 5"   ; Num 59.        ; String "?"     ; String "???"   ; Num 40.        ;   String "???" |] ;
-      [| String "Row 6"   ; Num 11.        ; Num (-2.)      ; Num (-7.5)     ; Num 9.         ;   Num (-7500.) |] ;
-      [| String "Row 7"   ; Num 0.         ; Num 44.        ; Num 44.        ; Num 18.        ;     Num 44000. |] ;
-      [| String "Row 9"   ; Num 115.       ; Num 36.        ; Num (-21.5)    ; Num 22.        ;  Num (-21500.) |] ;
+      [| String "Row 1"   ; Num 1.         ; Num 10.        ; Num 9.5        ; Num 24.        ; Num 9500.      |] ;
+      [| String "Row 2"   ; Num 23.        ; Num 12.        ; Num 0.5        ; Num 35.        ; Num 500.       |] ;
+      [| String "Row 3"   ; Num 22.        ; Num 222.       ; Num 211.       ; Num 23.        ; Num 211000.    |] ;
+      [| String "Row 4"   ; Num (-1.)      ; Num 6.         ; Num 6.5        ; Num 5.         ; Num 6500.      |] ;
+      [| String "Row 5"   ; Num 59.        ; String "?"     ; String "???"   ; Num 40.        ; String "???"   |] ;
+      [| String "Row 6"   ; Num 11.        ; Num (-2.)      ; Num (-7.5)     ; Num 9.         ; Num (-7500.)   |] ;
+      [| String "Row 7"   ; Num 0.         ; Num 44.        ; Num 44.        ; Num 18.        ; Num 44000.     |] ;
+      [| String "Row 9"   ; Num 115.       ; Num 36.        ; Num (-21.5)    ; Num 22.        ; Num (-21500.)  |] ;
     |] ;
     mask = None ;
   }
@@ -171,14 +171,14 @@ let large_constant_test () =
     [| "" ;            "" ; "" ;                   "" ;                "" ;            "" |] ;
     [| "" ;            "" ; "" ; "=(C7-(B7/(1.+1.)))" ;                "" ; "=(D7*1000.)" |] ;
     [| "" ;            "" ; "" ; "=(C8-(B8/(1.+1.)))" ;                "" ; "=(D8*1000.)" |] ;
-    [| "" ; "=SUM(B2:B8)" ; "" ; "=(C9-(B9/(1.+1.)))" ; "=AVERAGE(E2:E8)" ; "=(D9*1000.)" |] ;
+    [| "" ; "=SUM(B1:B8)" ; "" ; "=(C9-(B9/(1.+1.)))" ; "=AVERAGE(E1:E8)" ; "=(D9*1000.)" |] ;
   |] in test_matrix expected result
 
 let all = [
   "Point-wise column operations",         `Quick, pointwise_col_test ;
   "Point-wise row and column operations", `Quick, pointwise_row_col_test ;
   "Last row aggregation operations",      `Quick, last_row_aggregate_test ;
-  "Noisy data: row and column headings",  `Quick, headings_test ;
+  "Noisy data: row and column headings",  `Quick, noisy_headings_test ;
   "Synthesis restricted to a range",      `Quick, range_bound_test ;
   "Inference of large constants",         `Quick, large_constant_test ;
 ]

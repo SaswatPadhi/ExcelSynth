@@ -22,7 +22,7 @@ module Config = struct
     col_pointwise = true ;
     last_col_aggregate = true ;
     last_row_aggregate = true ;
-    max_aggregate_size = 8 ;
+    max_aggregate_size = 7 ;
     max_pointwise_size = 9 ;
     max_threads = 1 ;
     row_pointwise = false ;
@@ -138,8 +138,12 @@ let make_range_problem ~(config : Config.t) (task : Value.t task) (r : int) (c :
         ]
       }
 
-let apply_row_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t) ~(col_mask : bool array option)
-                      (r : int) : (Synthesizer.result option -> unit) =
+let can_replace_with_formula (output : Value.t) (index : int) (formula : Synthesizer.result) : bool =
+  Type.(equal NUM (Value.typeof output)) && Value.equal output formula.outputs.(index)
+[@@inline always]
+
+let apply_row_formula ~(config : Config.t) ~(data : Value.t Matrix.Offsetted.t) ~(mask : string Matrix.Offsetted.t)
+                      ~(col_mask : bool array option) (r : int) : (Synthesizer.result option -> unit) =
   let ot , ol = Matrix.Offsetted.top_left mask in
   let row_formula (c : int) (e : Expr.t) : string =
     let cells = Array.(foldi !>mask ~init:[]
@@ -147,34 +151,39 @@ let apply_row_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t) ~
                                                 else ((Excel.Cell.of_rc_ints (i + ot) (c + ol)) :: acc)))
       in "=" ^ (Expr.to_string (Array.of_list_rev cells) e)
    in match col_mask with
-      | None -> (function None -> ()
-                        | Some res -> Array.iteri !>mask.(0) ~f:(fun c _ -> if Type.(equal NUM (Value.typeof res.outputs.(c)))
-                                                                            then !>mask.(r).(c) <- row_formula c res.expr))
+      | None -> (function
+                 | None -> ()
+                 | Some res -> Array.iteri !>mask.(0)
+                                           ~f:(fun c _ -> if can_replace_with_formula !>data.(r).(c) c res
+                                                          then !>mask.(r).(c) <- row_formula c res.expr))
       | Some cm -> (function
                     | None -> ()
                     | Some res -> let i = ref (-1)
-                                   in Array.iteri !>mask.(0) ~f:(fun c _ -> if cm.(c) && (Int.incr i ; Type.(equal NUM (Value.typeof res.outputs.(!i))))
-                                                                            then !>mask.(r).(c) <- row_formula c res.expr))
+                                   in Array.iteri !>mask.(0)
+                                                  ~f:(fun c _ -> if cm.(c) && (Int.incr i ; can_replace_with_formula !>data.(r).(c) !i res)
+                                                                 then !>mask.(r).(c) <- row_formula c res.expr))
 
-let apply_col_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t) ~(row_mask : bool array option)
-                      (c : int) : (Synthesizer.result option -> unit) =
+let apply_col_formula ~(config : Config.t) ~(data : Value.t Matrix.Offsetted.t) ~(mask : string Matrix.Offsetted.t)
+                      ~(row_mask : bool array option) (c : int) : (Synthesizer.result option -> unit) =
   let ot , ol = Matrix.Offsetted.top_left mask in
   let col_formula (r : int) (e : Expr.t) : string =
-    let cells = Array.(foldi !>mask.(0) ~init:[]
+    let cells = Array.(foldi !>mask.(r) ~init:[]
                              ~f:(fun i acc _ -> if (i = c) || (config.top_left_only && i > c) then acc
                                                 else ((Excel.Cell.of_rc_ints (r + ot) (i + ol)) :: acc)))
       in "=" ^ (Expr.to_string (Array.of_list_rev cells) e)
    in match row_mask with
       | None -> (function None -> ()
-                        | Some res -> Array.iteri !>mask ~f:(fun r _ -> if Type.(equal NUM (Value.typeof res.outputs.(r)))
-                                                                        then !>mask.(r).(c) <- col_formula r res.expr))
+                        | Some res -> Array.iteri !>mask
+                                                  ~f:(fun r _ -> if can_replace_with_formula !>data.(r).(c) r res
+                                                                 then !>mask.(r).(c) <- col_formula r res.expr))
       | Some rm -> (function
                     | None -> ()
                     | Some res -> let i = ref (-1)
-                                   in Array.iteri !>mask ~f:(fun r _ -> if rm.(r) && (Int.incr i ; Type.(equal NUM (Value.typeof res.outputs.(!i))))
-                                                                        then !>mask.(r).(c) <- col_formula r res.expr))
+                                   in Array.iteri !>mask
+                                                  ~f:(fun r _ -> if rm.(r) && (Int.incr i ; can_replace_with_formula !>data.(r).(c) !i res)
+                                                                 then !>mask.(r).(c) <- col_formula r res.expr))
 
-let apply_range_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t)
+let apply_range_formula ~(config : Config.t) ~(data : Value.t Matrix.Offsetted.t) ~(mask : string Matrix.Offsetted.t)
                         (r : int) (c : int) : (Synthesizer.result option -> unit) =
   let ot , ol = Matrix.Offsetted.top_left mask in
   let rlen = Array.length !>mask and clen = Array.length !>mask.(0) in
@@ -182,25 +191,26 @@ let apply_range_formula ~(config : Config.t) ~(mask : string Matrix.Offsetted.t)
     let ranges = if config.top_left_only
                  then begin
                    if config.aggregate_2d
-                   then [| (Excel.Cell.of_rc_ints     ot ol)     ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1) (c+ol))
-                         ; (Excel.Cell.of_rc_ints     ot ol)     ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot) (c+ol-1)) |]
-                   else [| (Excel.Cell.of_rc_ints     ot (c+ol)) ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1) (c+ol))
-                         ; (Excel.Cell.of_rc_ints (r+ot) ol)     ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot) (c+ol-1)) |]
+                   then [| (Excel.Cell.of_rc_ints ot     ol)     ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1) (c+ol))
+                         ; (Excel.Cell.of_rc_ints ot     ol)     ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)   (c+ol-1)) |]
+                   else [| (Excel.Cell.of_rc_ints ot     (c+ol)) ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1) (c+ol))
+                         ; (Excel.Cell.of_rc_ints (r+ot) ol)     ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)   (c+ol-1)) |]
                  end
                  else begin
                    if config.aggregate_2d
-                   then [| (Excel.Cell.of_rc_ints       ot ol)       ^ ":" ^ (Excel.Cell.of_rc_ints    (r+ot-1) (clen+ol-1))
+                   then [| (Excel.Cell.of_rc_ints ot       ol)       ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1)    (clen+ol-1))
                          ; (Excel.Cell.of_rc_ints (r+ot+1) ol)       ^ ":" ^ (Excel.Cell.of_rc_ints (rlen+ot-1) (clen+ol-1))
-                         ; (Excel.Cell.of_rc_ints       ot ol)       ^ ":" ^ (Excel.Cell.of_rc_ints (rlen+ot-1) (c+ol-1))
-                         ; (Excel.Cell.of_rc_ints       ot (c+ol+1)) ^ ":" ^ (Excel.Cell.of_rc_ints (rlen+ot-1) (clen+ol-1)) |]
-                   else [| (Excel.Cell.of_rc_ints       ot (c+ol))   ^ ":" ^ (Excel.Cell.of_rc_ints    (r+ot-1) (c+ol))
+                         ; (Excel.Cell.of_rc_ints ot       ol)       ^ ":" ^ (Excel.Cell.of_rc_ints (rlen+ot-1) (c+ol-1))
+                         ; (Excel.Cell.of_rc_ints ot       (c+ol+1)) ^ ":" ^ (Excel.Cell.of_rc_ints (rlen+ot-1) (clen+ol-1)) |]
+                   else [| (Excel.Cell.of_rc_ints ot       (c+ol))   ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1)    (c+ol))
                          ; (Excel.Cell.of_rc_ints (r+ot+1) (c+ol))   ^ ":" ^ (Excel.Cell.of_rc_ints (rlen+ot-1) (c+ol))
-                         ; (Excel.Cell.of_rc_ints   (r+ot) ol)       ^ ":" ^ (Excel.Cell.of_rc_ints      (r+ot) (c+ol-1))
-                         ; (Excel.Cell.of_rc_ints   (r+ot) (c+ol+1)) ^ ":" ^ (Excel.Cell.of_rc_ints      (r+ot) (clen+ol-1)) |]
+                         ; (Excel.Cell.of_rc_ints (r+ot)   ol)       ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)      (c+ol-1))
+                         ; (Excel.Cell.of_rc_ints (r+ot)   (c+ol+1)) ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)      (clen+ol-1)) |]
                  end
       in "=" ^ (Expr.to_string ranges e)
    in function None -> ()
-             | Some res -> !>mask.(r).(c) <- range_formula res.expr
+             | Some res -> if can_replace_with_formula !>data.(r).(c) 0 res
+                           then !>mask.(r).(c) <- range_formula res.expr
 
 let run_on_values ?(config = Config.default) (task : Value.t task) : string Matrix.t =
   let cols = Array.(fold !!(task.data) ~init:(length !!(task.data).(0))
@@ -221,9 +231,10 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
                                                           ~bottom_right:(Some (bottom_right task.data)))
                        else raise (Invalid_argument "Provided 'mask' dimensions do not match 'data' dimensions!")
         in
-      let apply_row_formula = apply_row_formula ~config ~mask
-      and apply_col_formula = apply_col_formula ~config ~mask
-      and apply_range_formula = apply_range_formula ~config ~mask in
+      let apply_row_formula = apply_row_formula ~config ~mask ~data:task.data
+      and apply_col_formula = apply_col_formula ~config ~mask ~data:task.data
+      and apply_range_formula = apply_range_formula ~config ~mask ~data:task.data
+       in
       let solver problem =
         let config = {
           config._Synthesizer with

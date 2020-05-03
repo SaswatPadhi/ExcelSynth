@@ -78,3 +78,40 @@ let of_string (s : string) : t =
     else if equal s "FALSE" then Bool false
     else String s
   )
+
+module Range = struct
+  type nonrec t = t list list
+
+  let _reduce_float ?(init = 0.) ~f = List.fold ~init ~f:(fun acc -> List.fold ~init:acc ~f)
+
+  let _reduce_int ?(init = 0) ~f = List.fold ~init ~f:(fun acc -> List.fold ~init:acc ~f)
+
+  let type_count (t : Type.t) =
+    _reduce_int ~f:(fun acc v -> acc + (if Type.equal (typeof v) t then 1 else 0))
+
+  let num_count =
+    type_count Type.NUM
+
+  let sum =
+    _reduce_float ~f:(fun acc -> function Num n -> n +. acc
+                                        | _ -> acc)
+
+  let map_sum ~f =
+    _reduce_float ~f:(fun acc -> function Num n -> (f n) +. acc
+                                        | _ -> acc)
+
+  let average r =
+    (sum r) /. (Float.of_int (type_count Type.NUM r))
+
+  let stdev r =
+    let size = Float.of_int (type_count Type.NUM r) in
+    let avg = average r
+     in Float.sqrt ((map_sum ~f:(fun n -> (n -. avg) **. 2.) r) /. size)
+
+  let max r =
+    if type_count Type.NUM r < 1 then None
+    else Some (_reduce_float r
+                             ~init:Float.min_value
+                             ~f:(fun acc -> function Num n -> Float.max n acc
+                                                   | _ -> acc))
+end

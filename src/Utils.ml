@@ -22,11 +22,14 @@ module List = struct
   include List
 
   let to_string_map ~(sep : string) (l : 'a list) ~(f : 'a -> string) : string =
-    String.concat ~sep (List.map l ~f)
+    String.concat ~sep (map l ~f)
 end
 
 module Array = struct
   include Array
+
+  let accumulate_lists (a : 'a list array) : 'a list array =
+    iteri a ~f:(fun i e -> if i > 0 then a.(i) <- a.(i-1) @ e) ; a
 
   let to_string_map ~(sep : string) (l : 'a array) ~(f : 'a -> string) : string =
     String.concat_array ~sep (map l ~f)
@@ -40,7 +43,7 @@ module Excel = struct
                   else Char.(to_string (of_int_exn (c + 65)))
 
     let rec to_int col =
-      (String.fold col ~init:0 ~f:(fun acc c -> 26*acc + (Char.to_int c) - 64)) - 1
+      (String.fold col ~init:0 ~f:(fun acc c -> 26 * acc + (Char.to_int c) - 64)) - 1
   end
 
   module Cell = struct

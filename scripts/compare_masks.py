@@ -26,34 +26,58 @@ def dir_path(string):
 def contains(col, row, tl, br):
     return (tl[0] <= col <= br[0]) and (tl[1] <= row <= br[1])
 
+def print_PRF(label, tables, tp, fp, fn):
+    if tp + fp > 0:
+        precision = tp / (tp + fp)
+        precision_str = f'{precision:5.3f}'
+    else:
+        precision = -1
+        precision_str = '  X  '
+    if tp + fn > 0:
+        recall = tp / (tp + fn)
+        recall_str = f'{recall:5.3f}'
+    else:
+        recall = -1
+        recall_str = '  X  '
+
+    if precision > 0 and recall > 0:
+        fscore = (2 * precision * recall) / (precision + recall)
+        print(f'{label:80},  {tables:3}  ,  {tp:5d}  ,  {fp:5d}  ,  {fn:5d}  ,  {precision_str}  ,  {recall_str}  ,  {fscore:5.3f}  ')
+    else:
+        print(f'{label:80},  {tables:3}  ,  {tp:5d}  ,  {fp:5d}  ,  {fn:5d}  ,  {precision_str}  ,  {recall_str}  ,    X    ')
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-g', '--ground-truth-dir', type=dir_path, required=True)
     parser.add_argument('-p', '--prediction-dir', type=dir_path, required=True)
     parser.add_argument('-o', '--output-dir', type=dir_path, required=True)
+    parser.add_argument('-r', '--ground-truth-table-column', type=int, required=True)
+    parser.add_argument('-t', '--tables-data-csv', type=argparse.FileType('r'), required=True)
     parser.add_argument('-c', '--table-range-column', type=int, required=False)
-    parser.add_argument('-t', '--tables-data-csv', type=argparse.FileType('r'), required=False)
     args = parser.parse_args()
 
-    if (args.tables_data_csv is None) != (args.table_range_column is None):
-        print('-c and -t must be used together.')
-        exit(1)
+    TP, FP, FN = 0, 0, 0
+    S_TP, S_FP, S_FN = 0, 0, 0
+    M_TP, M_FP, M_FN = 0, 0, 0
+    TABLES, S_TABLES, M_TABLES = 0, 0, 0
 
-    ap , ar , af = [], [], []
+    print(f'{"FILENAME":80}, TABLES, TRUE_POS,FALSE_POS,FALSE_NEG,PRECISION,   RECALL, F1-SCORE')
+    print(f"{'='*80},{'='*7},{'='*9},{'='*9},{'='*9},{'='*9},{'='*9},{'='*9}")
 
-    print(f'{"FILENAME":80}, TRUE_POS,FALSE_POS,FALSE_NEG,PRECISION,   RECALL, F1-SCORE')
-    print(f"{'='*80},{'='*9},{'='*9},{'='*9},{'='*9},{'='*9},{'='*9}")
+    gt_tables_count, todo = {}, {}
+    for row in csv.reader(args.tables_data_csv):
+        gt_path = args.ground_truth_dir.joinpath(row[0].strip())
+        if not gt_path.is_file():
+            continue
 
-    todo = {}
-    if args.tables_data_csv is None:
-        for gt_path in sorted(args.ground_truth_dir.glob('*.csv')):
-            todo[gt_path] = None
-    else:
-        for row in csv.reader(args.tables_data_csv):
-            gt_path = args.ground_truth_dir.joinpath(row[0].strip())
-            if not gt_path.is_file():
-                continue
+        gt_table = row[args.ground_truth_table_column].strip()
+        if gt_table and gt_table != '<null>':
+            if gt_path in gt_tables_count:
+                gt_tables_count[gt_path] += 1
+            else:
+                gt_tables_count[gt_path] = 1
 
+        if args.table_range_column is not None:
             table = row[args.table_range_column].strip()
             if not table or table == '<null>':
                 continue
@@ -63,14 +87,16 @@ if __name__ == "__main__":
                 todo[gt_path].add(table)
             else:
                 todo[gt_path] = {table}
+        else:
+            todo[gt_path] = None
 
     for gt_path, tables in todo.items():
         pred_path = args.prediction_dir.joinpath(gt_path.name)
         if not pred_path.is_file():
-            print(f'{gt_path.name:80},    -    ,    -    ,    -    ,    -    ,    -    ,    -    ')
+            print(f'{gt_path.name:80},   -   ,    -    ,    -    ,    -    ,    -    ,    -    ,    -    ')
             continue
 
-        tp , fp , fn = 0.0 , 0.0 , 0.0
+        tp, fp, fn = 0, 0, 0
 
         with open(gt_path, 'r') as gt_file:
             gt_csv = csv.reader(gt_file)
@@ -93,12 +119,15 @@ if __name__ == "__main__":
                                     output_row.append('XX')
                                     continue
 
-                                if gt_cell == '' or '#REF!' in gt_cell or not any(c.isalpha() for c in gt_cell):
+                                if gt_cell == '':
                                     if pred_cell != '':
                                         fp += 1
                                         output_row.append('FP')
                                     else:
                                         output_row.append('--')
+                                elif '!' in gt_cell or not any(c.isalpha() for c in gt_cell):
+                                    output_row.append('**')
+                                    continue
                                 else:
                                     if pred_cell == '':
                                         fn += 1
@@ -110,22 +139,19 @@ if __name__ == "__main__":
                         except StopIteration:
                             break
 
-        if tp > 0 and tp + fp > 0.0 and tp + fn > 0.0:
-            precision = tp / (tp + fp)
-            recall = tp / (tp + fn)
-            fscore = (2.0 * precision * recall) / (precision + recall)
+        print_PRF(gt_path.name, gt_tables_count[gt_path], tp, fp, fn)
 
-            ap.append(precision)
-            ar.append(recall)
-            af.append(fscore)
+        TABLES += gt_tables_count[gt_path]
+        TP, FP, FN = TP + tp, FP + fp, FN + fn
 
-            print(f'{gt_path.name:80},{tp:9.3f},{fp:9.3f},{fn:9.3f},  {precision:5.3f}  ,  {recall:5.3f}  ,  {fscore:5.3f}')
+        if gt_tables_count[gt_path] > 1:
+            M_TABLES += gt_tables_count[gt_path]
+            M_TP, M_FP, M_FN = M_TP + tp, M_FP + fp, M_FN + fn
         else:
-            print(f'{gt_path.name:80},{tp:9.3f},{fp:9.3f},{fn:9.3f},    X    ,    X    ,    X    ')
+            S_TABLES += gt_tables_count[gt_path]
+            S_TP, S_FP, S_FN = S_TP + tp, S_FP + fp, S_FN + fn
 
-    if len(ap) > 0:
-        print(f"{'='*80},{'='*9},{'='*9},{'='*9},{'='*9},{'='*9},{'='*9}")
-        print(f'{"<MIN>":80},    -    ,    -    ,    -    ,  {min(ap):5.3f}  ,  {min(ar):5.3f}  ,  {min(af):5.3f}')
-        print(f'{"<AVG>":80},    -    ,    -    ,    -    ,  {mean(ap):5.3f}  ,  {mean(ar):5.3f}  ,  {mean(af):5.3f}')
-        print(f'{"<MED>":80},    -    ,    -    ,    -    ,  {median(ap):5.3f}  ,  {median(ar):5.3f}  ,  {median(af):5.3f}')
-        print(f'{"<MAX>":80},    -    ,    -    ,    -    ,  {max(ap):5.3f}  ,  {max(ar):5.3f}  ,  {max(af):5.3f}')
+    print(f"{'='*80},{'='*7},{'='*9},{'='*9},{'='*9},{'='*9},{'='*9},{'='*9}")
+    print_PRF('<OVERALL>', TABLES, TP, FP, FN)
+    print_PRF('<OVERALL::SINGLE_TABLE_SHEETS>', S_TABLES, S_TP, S_FP, S_FN)
+    print_PRF('<OVERALL::MULTI_TABLE_SHEETS>', M_TABLES, M_TP, M_FP, M_FN)

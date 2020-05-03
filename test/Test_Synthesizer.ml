@@ -36,10 +36,10 @@ let ge_plus_x_z_y () =
 let not_or_eq_w_x_eq_y_z () =
   let result = solve ~config {
     inputs = List.map ~f:(Array.map ~f:(fun i -> Value.Num i))
-               [ [| 4. ; -1. ;  -5. ;  1. ;  -1. ; 20. |]
-               ; [| 3. ;  7. ;  -1. ; -4. ;   1. ; 20. |]
+               [ [| 7. ; -1. ;  -5. ; 20. ;  -1. ; 20. |]
+               ; [| 3. ;  7. ;  25. ; -4. ;   1. ; 20. |]
                ; [| 9. ; -3. ; -10. ; 11. ; -10. ; 20. |]
-               ; [| 1. ; -6. ; -10. ; 11. ;  -1. ; -3. |] ];
+               ; [| 2. ; -6. ; -10. ; 11. ;  -1. ; -3. |] ];
     outputs = Array.map ~f:(fun b -> Value.Bool b)
                         [| true ; true ; false ; false ; true ; false |];
     constants = []
@@ -48,7 +48,7 @@ let not_or_eq_w_x_eq_y_z () =
    in Alcotest.(check string) "identical" "NOT(OR((w=x),(y=z)))" result_string
 
 let all = [
-  "(+ x y)",                         `Quick, plus_x_y ;
-  "(>= (+ x z) y)",                  `Quick, ge_plus_x_z_y ;
-  "(not (= (= w x) (= y z)))",       `Quick, not_or_eq_w_x_eq_y_z ;
+  "(+ x y)",                    `Quick, plus_x_y ;
+  "(>= (+ x z) y)",             `Quick, ge_plus_x_z_y ;
+  "(not (or (= w x) (= y z)))", `Quick, not_or_eq_w_x_eq_y_z ;
 ]

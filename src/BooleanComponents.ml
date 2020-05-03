@@ -1,8 +1,9 @@
 open Base
 
 open Expr
+open Utils
 
-let all = [
+let unary = [
   {
     name = "not";
     codomain = Type.BOOL;
@@ -14,7 +15,10 @@ let all = [
                  | _ -> false);
     evaluate = Value.(fun [@warning "-8"] [Bool x] -> Bool (not x));
     to_string = (fun [@warning "-8"] [a] -> "NOT(" ^ a ^ ")")
-  } ;
+  }
+]
+
+let binary = [
   {
     name = "and";
     codomain = Type.BOOL;
@@ -37,4 +41,4 @@ let all = [
   }
 ]
 
-let levels = [| all |]
+let levels = Array.accumulate_lists [| unary ; binary |]

@@ -36,10 +36,21 @@ let is_constant expr =
      with Caml.Exit -> false
 
 let rec to_string arg_names = function
-  | Application (comp, comp_args) -> comp.to_string (List.map ~f:(to_string arg_names) comp_args)
+  | Application (comp, args) -> comp.to_string (List.map ~f:(to_string arg_names) args)
   | Constant v -> Value.to_string v
   | Variable i -> arg_names.(i)
 
 let rec size = function
-  | Application (_, args) -> List.fold_left ~f:(+) ~init:1 (List.map ~f:size args)
+  | Application (_, args) -> List.fold ~f:(+) ~init:1 (List.map ~f:size args)
   | _ -> 1
+
+let rec evaluate expr inputs =
+  match expr with
+  | Application (comp, args) -> comp.evaluate (List.map args ~f:(fun a -> evaluate a inputs))
+  | Constant c -> c
+  | Variable i -> List.nth_exn inputs i
+
+let rec count_variables = function
+  | Variable i -> [i]
+  | Application (_, args) -> List.fold ~f:(@) ~init:[] (List.map ~f:count_variables args)
+  | _ -> []

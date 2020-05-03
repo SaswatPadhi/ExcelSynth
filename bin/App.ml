@@ -10,6 +10,9 @@ let config_flags =
     let aggregate_2d                = flag "enable-2d-aggregation"
                                            (optional_with_default Driver.Config.default.aggregate_2d bool)
                                            ~doc:"BOOLEAN use 2D ranges in aggregation operations"
+    and arg_type_mismatch_threshold = flag "argtype-error-threshold"
+                                           (optional_with_default Driver.Config.default._Synthesizer.arg_type_mismatch_threshold float)
+                                           ~doc:"FLOAT maximum fraction of cells that may be ignored due to arg-type errors"
     and last_col_aggregate          = flag "check-last-col-aggregations"
                                            (optional_with_default Driver.Config.default.last_col_aggregate bool)
                                            ~doc:"BOOLEAN synthesize aggregation formulas for cells in the last column"
@@ -25,9 +28,9 @@ let config_flags =
     and disable_constant_solutions  = flag "disable-constant-solutions"
                                            (optional_with_default Driver.Config.default._Synthesizer.disable_constant_solutions bool)
                                            ~doc:"BOOLEAN disable constant formulas (e.g. =0.0) for cells"
-    and enable_booleans             = flag "enable-booleans"
+    and disable_booleans             = flag "disable-booleans"
                                            (optional_with_default false bool)
-                                           ~doc:"BOOLEAN enable Boolean and conditional expressions"
+                                           ~doc:"BOOLEAN disable Booleans and conditional expressions"
     and large_constant_threshold    = flag "large-constant-threshold"
                                            (optional_with_default Driver.Config.default._Synthesizer.large_constant_threshold int)
                                            ~doc:"INTEGER threshold for identifying large constants (-1 to disable)"
@@ -37,6 +40,9 @@ let config_flags =
     and max_pointwise_size          = flag "max-pointwise-expr-size"
                                            (optional_with_default Driver.Config.default.max_pointwise_size int)
                                            ~doc:"INTEGER maximum AST size for pointwise transformations"
+    and max_variable_occurrence     = flag "max-variable-occurrence"
+                                           (optional_with_default Driver.Config.default._Synthesizer.max_variable_occurrence int)
+                                           ~doc:"INTEGER maximum occurrences of a variable within an expression"
     and max_threads                 = flag "max-threads"
                                            (optional_with_default Driver.Config.default.max_threads int)
                                            ~doc:"INTEGER maximum number of threads to create"
@@ -46,17 +52,14 @@ let config_flags =
     and top_left_only               = flag "restrict-to-top-left-data"
                                            (optional_with_default Driver.Config.default.top_left_only bool)
                                            ~doc:"BOOLEAN only use data to the top left of a cell in formulas"
-    and arg_type_mismatch_threshold = flag "type-error-threshold"
-                                           (optional_with_default Driver.Config.default._Synthesizer.arg_type_mismatch_threshold float)
-                                           ~doc:"FLOAT maximum fraction of cells that may be ignored due to arg-type errors"
     and value_mismatch_threshold    = flag "value-error-threshold"
                                            (optional_with_default Driver.Config.default._Synthesizer.value_mismatch_threshold float)
                                            ~doc:"FLOAT maximum fraction of cells that may be ignored due to value errors"
      in Float.Approx.rel_error := relative_error
       ; let components_per_level = Synthesizer.(
-          if enable_booleans
-          then BooleanComponents.levels ++ NumComponents.levels ++ RangeComponents.levels
-          else NumComponents.no_bool_levels ++ RangeComponents.levels
+          if disable_booleans
+          then NumComponents.no_bool_levels ++ RangeComponents.levels
+          else BooleanComponents.levels ++ NumComponents.levels ++ RangeComponents.levels
         ) in {
           Driver.Config.default with
           aggregate_2d ;
@@ -70,10 +73,11 @@ let config_flags =
           top_left_only ;
           _Synthesizer = {
             Driver.Config.default._Synthesizer with
-            components_per_level ;
-            large_constant_threshold ;
-            disable_constant_solutions ;
             arg_type_mismatch_threshold ;
+            components_per_level ;
+            disable_constant_solutions ;
+            large_constant_threshold ;
+            max_variable_occurrence ;
             value_mismatch_threshold ;
           } ;
         } [@warning "-23"]
