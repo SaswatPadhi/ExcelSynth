@@ -35,7 +35,7 @@ let uncommon_aggregates = [
   }
 ]
 
-let complex_aggregates = [
+let rare_aggregates = [
   {
     name = "range-stdev";
     codomain = Type.NUM;
@@ -44,18 +44,6 @@ let complex_aggregates = [
     evaluate = Value.(function [@warning "-8"] [Range r]
                       -> size_check_then_aggregate r ~f:Range.stdev);
     to_string = (fun [@warning "-8"] [a] -> "STDEVP(" ^ a ^ ")")
-  }
-]
-
-let rare_aggregates = [
-  {
-    name = "range-max";
-    codomain = Type.NUM;
-    domain = Type.[RANGE];
-    can_apply = (function _ -> true);
-    evaluate = Value.(function [@warning "-8"] [Range r]
-                      -> size_check_then_aggregate r ~f:(fun r -> Option.value_exn (Range.max r)));
-    to_string = (fun [@warning "-8"] [a] -> "MAX(" ^ a ^ ")")
   }
 ]
 
@@ -105,7 +93,6 @@ let drop_tail = [
 let levels = Array.accumulate_lists [|
   aggregates ;
   uncommon_aggregates ;
-  complex_aggregates ;
   rare_aggregates ;
   drop_head ;
   drop_tail

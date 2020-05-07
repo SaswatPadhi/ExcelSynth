@@ -26,6 +26,7 @@ module Config = struct
     large_constant_threshold : int ;
     max_expressiveness_level : int ;
     max_variable_occurrence : int ;
+    max_aggregation_occurrence : int ;
     order : int -> int -> float ;
     size_limit : int ;
     arg_type_mismatch_threshold : float ;
@@ -39,7 +40,8 @@ module Config = struct
     large_constant_threshold = 5 ;
     max_expressiveness_level = 1024 ;
     max_variable_occurrence = 2 ;
-    order = (fun g_cost e_cost -> (Int.to_float e_cost) *. (Float.log (Int.to_float g_cost))) ;
+    max_aggregation_occurrence = 1 ;
+    order = (fun g_size e_size -> (Int.to_float e_size) *. (Float.log (Int.to_float g_size))) ;
     size_limit = 9 ;
     arg_type_mismatch_threshold = 0.6 ;
     value_mismatch_threshold = 0.1 ;
@@ -124,12 +126,24 @@ end
 
 let __MAX_VARIABLES__ = 128
 
+let var_occurrence_bad ~(config : Config.t) (expr : Expr.t) : bool =
+  let var_frequencies = List.group ~break:(<>) (Expr.extract_variables expr)
+   in List.(exists var_frequencies
+                   ~f:(fun l -> length l > config.max_variable_occurrence))
+
+let app_occurrence_bad ~(config : Config.t) (expr : Expr.t) : bool =
+  let app_frequencies = List.group ~break:String.(<>) (Expr.extract_applications expr)
+   in List.(exists app_frequencies
+                   ~f:(fun l -> length l > config.max_aggregation_occurrence
+                             && let name = hd_exn l
+                                 in Array.exists RangeComponents.levels
+                                                 ~f:(exists ~f:(fun (c : Expr.component) -> String.equal c.name name))))
+
 let create_candidate ~(config : Config.t) (comp : Expr.component) (args : result list) : result option =
   let subexprs = List.map args ~f:(fun arg -> arg.expr)
    in if not (comp.can_apply subexprs) then None
-      else let expr = Expr.Application (comp, subexprs) in
-           let var_frequencies = List.group ~break:(<>) (Expr.count_variables expr)
-            in if List.(exists var_frequencies ~f:(fun l -> length l > config.max_variable_occurrence)) then None
+      else let expr = Expr.Application (comp, subexprs)
+            in if var_occurrence_bad ~config expr || app_occurrence_bad ~config expr then None
                else try
                  let outputs =
                    Array.mapi (List.hd_exn args).outputs
@@ -137,7 +151,7 @@ let create_candidate ~(config : Config.t) (comp : Expr.component) (args : result
                                              with Match_failure _ -> Value.Error)
                   in Some { expr ; outputs }
                with Internal_Exn _ as e -> raise e
-                  | e -> None
+                  | _ -> None
 
 let check_candidate_args ~(config : Config.t) (candidate : result) : bool =
   let mismatches = ref 0. and length = ref 0.
@@ -160,7 +174,7 @@ let create_and_check_candidate_args ~(config : Config.t) (comp : Expr.component)
                       then Some candidate
                       else None
 
-let solve_impl (config : Config.t) (task : task) =
+let solve_impl ~(config : Config.t) (task : task) =
   let task_codomain = Value.majority_type task.outputs in
   let typed_components t_type = Array.append
     (Array.create ~len:1 [])
@@ -193,11 +207,11 @@ let solve_impl (config : Config.t) (task : task) =
    in
 
   let seen_outputs = ref (Set.empty (module Output)) in
-  let add_candidate candidates_set level cost (candidate : result) =
+  let add_candidate candidates_set level size (candidate : result) =
     let old_size = Set.length !seen_outputs
      in seen_outputs := Set.add !seen_outputs candidate.outputs
       ; if (Set.length !seen_outputs) <> old_size
-        then ignore (DList.insert_last candidates_set.(level).(cost) candidate)
+        then ignore (DList.insert_last candidates_set.(level).(size) candidate)
    in
 
   let make_constant_candidate value : result = {
@@ -250,7 +264,7 @@ let solve_impl (config : Config.t) (task : task) =
                       end
                     ; begin
                         let r = i /. o
-                         in if not (Float.equal o 0.) && not (is_trivial r)
+                         in if not (is_trivial r)
                             then Option.iter ~f:(check ~large_constant_inference:false)
                                              (if Float.(r > 1.)
                                               then let ratio_candidate = make_constant_candidate (Value.Num r)
@@ -287,7 +301,7 @@ let solve_impl (config : Config.t) (task : task) =
 
   let check = check ~large_constant_inference:(config.large_constant_threshold >= 0) in
 
-  let apply_component op_level expr_level cost domain applier =
+  let apply_component op_level expr_level size domain applier =
     let rec apply_cells acc domain locations =
       match domain , locations with
       | typ :: arg_types , (lvl,loc) :: locations
@@ -295,9 +309,9 @@ let solve_impl (config : Config.t) (task : task) =
                       ~f:(fun x -> apply_cells (x :: acc) arg_types locations)
       | ([], []) -> applier (List.rev acc)
       | _ -> raise (Internal_Exn "Impossible case!")
-     in divide_size (apply_cells [] domain) (List.length domain) op_level expr_level (cost - 1)
+     in divide_size (apply_cells [] domain) (List.length domain) op_level expr_level (size - 1)
    in
-  let expand_component op_level expr_level cost candidates (component : Expr.component) =
+  let expand_component op_level expr_level size candidates (component : Expr.component) =
     let applier args =
       match safe_apply component args with
       | None -> ()
@@ -305,34 +319,34 @@ let solve_impl (config : Config.t) (task : task) =
         -> let expr_size = Expr.size result.expr
             in (if expr_size <= config.size_limit && Type.equal task_codomain component.codomain then check result)
              ; add_candidate candidates expr_level expr_size result
-     in apply_component op_level expr_level cost component.domain applier
+     in apply_component op_level expr_level size component.domain applier
    in
-  let ordered_level_cost =
-    let grammar_cost level = (List.length constants) * (List.length config.components_per_level.(level-1))
-     in List.sort ~compare:(fun (level1,cost1) (level2,cost2)
-                           -> Float.compare (config.order (grammar_cost level1) cost1)
-                                            (config.order (grammar_cost level2) cost2))
+  let ordered_level_size =
+    let grammar_size level = (List.length constants) * (List.length config.components_per_level.(level-1))
+     in List.sort ~compare:(fun (level1,size1) (level2,size2)
+                           -> Float.compare (config.order (grammar_size level1) size1)
+                                            (config.order (grammar_size level2) size2))
                   (List.(cartesian_product (range 1 ~stop:`inclusive (Int.min config.max_expressiveness_level
                                                                               (Array.length config.components_per_level)))
                                            (range 2 config.size_limit)))
    in
 
   Log.debug (lazy ( "  > Exploration order:")) ;
-  Log.debug (lazy ("    " ^ (List.to_string_map ordered_level_cost ~sep:" > "
+  Log.debug (lazy ("    " ^ (List.to_string_map ordered_level_size ~sep:" > "
                                                 ~f:(fun (l,c) -> "(G" ^ (Int.to_string l)
                                                                ^ "," ^ (Int.to_string c) ^ ")"))));
   Log.debug (lazy ("  > Checking larger expressions:")) ;
 
-  let seen_level_cost = ref (Set.empty (module IntTuple)) in
-  List.iter ordered_level_cost
-    ~f:(fun (level,cost)
-        -> List.(iter (cartesian_product (range ~stop:`inclusive 1 level) (range 2 cost))
-             ~f:(fun (l,c) -> if not (Set.mem !seen_level_cost (l,c))
+  let seen_level_size = ref (Set.empty (module IntTuple)) in
+  List.iter ordered_level_size
+    ~f:(fun (level,size)
+        -> List.(iter (cartesian_product (range ~stop:`inclusive 1 level) (range 2 size))
+             ~f:(fun (l,c) -> if not (Set.mem !seen_level_size (l,c))
                               then failwith ( "Internal Error :: Not a well order!\n"
                                             ^ "Attempted to explore (G" ^ (Int.to_string level)
-                                            ^ "." ^ (Int.to_string cost) ^ ") before (G"
+                                            ^ "." ^ (Int.to_string size) ^ ") before (G"
                                             ^ (Int.to_string l) ^ "." ^ (Int.to_string c) ^ ")")))
-         ; seen_level_cost := (Set.add !seen_level_cost (level, cost))
+         ; seen_level_size := (Set.add !seen_level_size (level, size))
          ; List.(iter (range 1 ~stop:`inclusive level)
                       ~f:(fun l -> List.iter
                                      Type.[ (bool_candidates,   bool_components.(l))
@@ -340,7 +354,7 @@ let solve_impl (config : Config.t) (task : task) =
                                           ; (string_candidates, string_components.(l))
                                           ; (range_candidates,  range_components.(l)) ]
                                      ~f:(fun (cands, comps)
-                                           -> iter comps ~f:(expand_component l level cost cands)))))
+                                           -> iter comps ~f:(expand_component l level size cands)))))
 
 let solve ?(config = Config.default) (task : task) : result =
   Log.debug (lazy "") ;
@@ -351,7 +365,7 @@ let solve ?(config = Config.default) (task : task) : result =
   List.(iteri task.inputs
               ~f:(fun i input -> Log.debug (lazy ("    + v" ^ (Int.to_string i) ^ ": [ " ^
                                                   (Array.to_string_map input ~sep:" ; " ~f:Value.to_string) ^ " ]")))) ;
-  try solve_impl config task
+  try solve_impl ~config task
     ; Log.debug (lazy ("  # NO SOLUTION FOUND!"))
     ; raise NoSuchFunction
   with NoMajorityType

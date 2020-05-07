@@ -94,24 +94,27 @@ module Range = struct
 
   let sum =
     _reduce_float ~f:(fun acc -> function Num n -> n +. acc
-                                        | _ -> acc)
+                                        | String "" -> acc
+                                        | _ -> raise (Invalid_argument "Cannot aggregate non-numeric data"))
 
   let map_sum ~f =
     _reduce_float ~f:(fun acc -> function Num n -> (f n) +. acc
-                                        | _ -> acc)
+                                        | String "" -> acc
+                                        | _ -> raise (Invalid_argument "Cannot aggregate non-numeric data"))
 
   let average r =
-    (sum r) /. (Float.of_int (type_count Type.NUM r))
+    (sum r) /. (Float.of_int (num_count r))
 
   let stdev r =
-    let size = Float.of_int (type_count Type.NUM r) in
+    let size = Float.of_int (num_count r) in
     let avg = average r
      in Float.sqrt ((map_sum ~f:(fun n -> (n -. avg) **. 2.) r) /. size)
 
   let max r =
-    if type_count Type.NUM r < 1 then None
+    if num_count r < 1 then None
     else Some (_reduce_float r
                              ~init:Float.min_value
                              ~f:(fun acc -> function Num n -> Float.max n acc
-                                                   | _ -> acc))
+                                                   | String "" -> acc
+                                                   | _ -> raise (Invalid_argument "Cannot aggregate non-numeric data")))
 end

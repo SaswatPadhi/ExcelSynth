@@ -22,7 +22,8 @@ let rec equal e1 e2 =
   | Constant v1, Constant v2 -> Value.equal v1 v2
   | Application (c1, l1), Application (c2, l2)
     -> String.equal c1.name c2.name
-    && List.fold2_exn l1 l2 ~init:true ~f:(fun acc x y -> acc && (equal x y))
+    && (try List.iter2_exn l1 l2 ~f:(fun x y -> if not (equal x y) then raise Caml.Exit) ; true
+        with _ -> false)
   | _ -> false
 
 let (=/=) = fun x y -> (not (equal x y))
@@ -44,13 +45,17 @@ let rec size = function
   | Application (_, args) -> List.fold ~f:(+) ~init:1 (List.map ~f:size args)
   | _ -> 1
 
-let rec evaluate expr inputs =
+let rec evaluate inputs expr =
   match expr with
-  | Application (comp, args) -> comp.evaluate (List.map args ~f:(fun a -> evaluate a inputs))
+  | Application (comp, args) -> comp.evaluate (List.map args ~f:(evaluate inputs))
   | Constant c -> c
   | Variable i -> List.nth_exn inputs i
 
-let rec count_variables = function
+let rec extract_variables = function
   | Variable i -> [i]
-  | Application (_, args) -> List.fold ~f:(@) ~init:[] (List.map ~f:count_variables args)
+  | Application (_, args) -> List.fold ~f:(@) ~init:[] (List.map ~f:extract_variables args)
+  | _ -> []
+
+let rec extract_applications = function
+  | Application (component, args) -> List.fold ~f:(@) ~init:[component.name] (List.map ~f:extract_applications args)
   | _ -> []

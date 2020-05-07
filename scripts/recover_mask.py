@@ -85,7 +85,6 @@ if __name__ == "__main__":
                     if result.returncode != 0:
                         logging.error(f'      `-- Failed to recover the formula mask!')
                         logging.error(result.stderr)
-                        exit(1)
                     else:
                         copyfile(tmp_w_path, fm_out_path)
                         copyfile(tmp_w_path, tmp_r_path)

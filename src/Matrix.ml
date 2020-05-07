@@ -19,7 +19,7 @@ module Offsetted = struct
                                                          else Some (filteri row ~f:(fun j _ -> c1 <= j && j <= c2))))
      in Offsetted (mat , (r1,c1) , (r2,c2) , submat)
 
-  let merge ((Offsetted (mat , (r1,c1) , _ , submat)) : 'a T.t) : 'a t =
+  let commit ((Offsetted (mat , (r1,c1) , _ , submat)) : 'a T.t) : 'a t =
     Array.(iteri submat ~f:(fun i row -> iteri row ~f:(fun j cell -> mat.(i+r1).(j+c1) <- cell))) ; mat
   [@@inline always]
 

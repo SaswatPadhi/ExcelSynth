@@ -44,7 +44,7 @@ RUN opam install --yes alcotest.0.8.5 \
                        core.v0.13.0 \
                        csv.2.4 \
                        dune.2.5.1 \
-                       lwt.5.2.0 \
+                       lwt.5.3.0 \
                        && \
     opam clean --yes && \
     git clone https://github.com/SaswatPadhi/ExcelSynth.git

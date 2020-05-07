@@ -22,7 +22,7 @@ module Config = struct
     col_pointwise = true ;
     last_col_aggregate = true ;
     last_row_aggregate = true ;
-    max_aggregate_size = 7 ;
+    max_aggregate_size = 8 ;
     max_pointwise_size = 9 ;
     max_threads = 1 ;
     row_pointwise = false ;
@@ -250,20 +250,25 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
         } in try Some (Synthesizer.solve ~config problem)
              with Exceptions.NoSuchFunction -> None
        in
+      let numeric_row r =
+        Array.exists !>(task.data).(r) ~f:(fun c -> Type.(equal NUM (Value.typeof c)))
+       in
+      let numeric_col c =
+        Array.exists !>(task.data) ~f:(fun r -> Type.(equal NUM (Value.typeof r.(c))))
+       in
           Lwt_preemptive.(simple_init () ; set_bounds (0, config.max_threads) ; set_max_number_of_threads_queued 1024)
         ; (if config.last_row_aggregate && rlen > 3
            then (Log.empty_line () ; Log.info (lazy "----< ROW AGGREGATES >----") ; Log.push_indent () ;
-                 match Array.(findi !>(task.data) ~f:(fun r _ -> exists !>(task.data).(rlen-r-1) ~f:(fun c -> Type.(equal NUM (Value.typeof c))))) with
-                 | Some (r, _) when rlen - r > 4
-                   -> let last_row = rlen - r - 1
-                       in Lwt_main.run (
-                            Lwt_list.iter_p (fun c -> if String.is_empty !>mask.(last_row).(c)
-                                                      then let work () = apply_range_formula last_row c (agg_solver (make_range_problem last_row c))
-                                                            in Lwt_preemptive.detach work ()
-                                                      else Lwt.return ())
-                                            (List.range 0 clen))
-                        ; Log.pop_indent ()
-                 | _ -> ())
+                 Lwt_main.run (
+                   Lwt_list.iter_p
+                     (fun last_row -> Lwt_list.iter_p
+                                        (fun c -> if String.is_empty !>mask.(last_row).(c)
+                                                  then let work () = apply_range_formula last_row c (agg_solver (make_range_problem last_row c))
+                                                        in Lwt_preemptive.detach work ()
+                                                  else Lwt.return ())
+                                        (List.range 0 clen))
+                     (List.(filter (range 0 rlen)
+                                   ~f:(fun r -> numeric_row r && (r = rlen - 1 || not (numeric_row (r + 1))))))))
            else Log.info (lazy "ROW AGGREGATES SKIPPED!"))
         ; (if config.col_pointwise
            then (Log.empty_line () ; Log.info (lazy "----< COL POINTWISE >----") ; Log.push_indent () ;
@@ -276,17 +281,16 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
            else Log.info (lazy "COL POINTWISE SKIPPED!"))
         ; (if config.last_col_aggregate && clen > 3
            then (Log.empty_line () ; Log.info (lazy "----< COL AGGREGATES >----") ; Log.push_indent () ;
-                 match Array.(findi !>(task.data).(0) ~f:(fun c _ -> exists !>(task.data) ~f:(fun r -> Type.(equal NUM (Value.typeof r.(clen-c-1)))))) with
-                 | Some (c, _) when clen - c > 4
-                   -> let last_col = clen - c - 1
-                       in Lwt_main.run (
-                            Lwt_list.iter_p (fun r -> if String.is_empty !>mask.(r).(last_col)
-                                                      then let work () = apply_range_formula r last_col (agg_solver (make_range_problem r last_col))
-                                                            in Lwt_preemptive.detach work ()
-                                                      else Lwt.return ())
-                                            (List.range 0 rlen))
-                        ; Log.pop_indent ()
-                 | _ -> ())
+                 Lwt_main.run (
+                   Lwt_list.iter_p
+                     (fun last_col -> Lwt_list.iter_p
+                                        (fun r -> if String.is_empty !>mask.(r).(last_col)
+                                                  then let work () = apply_range_formula r last_col (agg_solver (make_range_problem r last_col))
+                                                        in Lwt_preemptive.detach work ()
+                                                  else Lwt.return ())
+                                        (List.range 0 rlen))
+                     (List.(filter (range 0 clen)
+                                   ~f:(fun c -> numeric_col c && (c = clen - 1 || not (numeric_col (c + 1))))))))
            else Log.info (lazy "COL AGGREGATES SKIPPED!"))
         ; (if config.row_pointwise
            then (Log.empty_line () ; Log.info (lazy "----< ROW POINTWISE >----") ; Log.push_indent () ;
@@ -297,7 +301,7 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
                                    (List.range 0 rlen)) ;
                  Log.pop_indent ())
            else Log.info (lazy "ROW POINTWISE SKIPPED!"))
-        ; Matrix.Offsetted.merge mask
+        ; Matrix.Offsetted.commit mask
 
 let run ?(config = Config.default) (task : string task) : string Matrix.t =
   let cols = Array.(fold !!(task.data) ~init:(length !!(task.data).(0))
@@ -308,7 +312,7 @@ let run ?(config = Config.default) (task : string task) : string Matrix.t =
         let ot , ol = Matrix.Offsetted.top_left task.data in
         let mask : string Matrix.t =
           match task.mask with
-          | None -> Array.map !!(task.data) ~f:(Array.map ~f:(fun _ -> "" ))
+          | None -> Array.map !!(task.data) ~f:(Array.map ~f:(fun _ -> ""))
           | Some mask -> if Array.((length mask) = rlen && (for_all mask ~f:(fun re -> (length re) = clen)))
                          then mask
                          else raise (Invalid_argument "Provided 'mask' dimensions do not match 'data' dimensions!")
