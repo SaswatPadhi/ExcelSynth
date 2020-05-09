@@ -10,7 +10,7 @@ def dir_path(string):
     if path.is_dir(): return path
     raise NotADirectoryError(string)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input-dir', type=dir_path, required=True)
     parser.add_argument('-o', '--output-dir', type=dir_path, required=True)

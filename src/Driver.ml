@@ -79,7 +79,14 @@ let make_pointwise_col_problem ~(config : Config.t) ~(row_mask : bool array opti
           outputs = Array.filter_mapi !>(task.data) ~f:(fun i a -> if rm.(i) then Some a.(c) else None) ;
         }
 
-let make_range_problem ~(config : Config.t) (task : Value.t task) (r : int) (c : int) : Synthesizer.task =
+let make_range_problem ~(config : Config.t) (task : Value.t task)
+                       ?(rmin :int option = None) ?(rmax :int option = None)
+                       ?(cmin :int option = None) ?(cmax :int option = None)
+                       (r : int) (c : int) : Synthesizer.task =
+  let rmin = Option.value ~default:0 rmin in
+  let rmax = Option.value ~default:(Array.length !>(task.data) - 1) rmax in
+  let cmin = Option.value ~default:0 cmin in
+  let cmax = Option.value ~default:(Array.length !>(task.data).(0) - 1) cmax in
   let constants = task.constants and outputs = [| !>(task.data).(r).(c) |]
    in if config.top_left_only
       then {
@@ -89,18 +96,18 @@ let make_range_problem ~(config : Config.t) (task : Value.t task) (r : int) (c :
             if config.aggregate_2d
             then Array.(foldi !>(task.data) ~init:[]
                               ~f:(fun i acc row
-                                  -> if i >= r then acc else (
-                                       (foldi row ~init:[] ~f:(fun j acc col -> if j > c then acc else col :: acc)) :: acc)))
+                                  -> if i < rmin || i >= r then acc else (
+                                       (foldi row ~init:[] ~f:(fun j acc col -> if j < cmin || j > c then acc else col :: acc)) :: acc)))
             else Array.(foldi !>(task.data) ~init:[]
-                              ~f:(fun i acc row -> if i >= r then acc else [row.(c)] :: acc))
+                              ~f:(fun i acc row -> if i < rmin || i >= r then acc else [row.(c)] :: acc))
           |] ; [|
             if config.aggregate_2d
             then Array.(foldi !>(task.data) ~init:[]
                               ~f:(fun i acc row
-                                  -> if i > r then acc else (
-                                       (foldi row ~init:[] ~f:(fun j acc col -> if j >= c then acc else col :: acc)) :: acc)))
+                                  -> if i < rmin || i > r then acc else (
+                                       (foldi row ~init:[] ~f:(fun j acc col -> if j < cmin || j >= c then acc else col :: acc)) :: acc)))
             else Array.[foldi !>(task.data).(r) ~init:[]
-                              ~f:(fun i acc col -> if i >= c then acc else col :: acc)]
+                              ~f:(fun j acc col -> if j < cmin || j >= c then acc else col :: acc)]
           |]
         ]
       } else {
@@ -110,30 +117,34 @@ let make_range_problem ~(config : Config.t) (task : Value.t task) (r : int) (c :
             if config.aggregate_2d
             then Array.(foldi !>(task.data) ~init:[]
                               ~f:(fun i acc row
-                                  -> if i >= r then acc else ((fold row ~init:[] ~f:(fun acc col -> col :: acc)) :: acc)))
+                                  -> if i < rmin || i >= r then acc else (
+                                       foldi row ~init:[] ~f:(fun j acc col -> if j < cmin || j > cmax then acc else col :: acc)) :: acc))
             else Array.(foldi !>(task.data) ~init:[]
-                              ~f:(fun i acc row -> if i >= r then acc else [row.(c)] :: acc))
+                              ~f:(fun i acc row -> if i < rmin || i >= r then acc else [row.(c)] :: acc))
           |] ; [|
             if config.aggregate_2d
             then Array.(foldi !>(task.data) ~init:[]
-                         ~f:(fun i acc row
-                             -> if i <= r then acc else ((fold row ~init:[] ~f:(fun acc col -> col :: acc)) :: acc)))
+                              ~f:(fun i acc row
+                                  -> if i > rmax || i <= r then acc else (
+                                       foldi row ~init:[] ~f:(fun j acc col -> if j < cmin || j > cmax then acc else col :: acc)) :: acc))
             else Array.(foldi !>(task.data) ~init:[]
-                              ~f:(fun i acc row -> if i <= r then acc else [row.(c)] :: acc))
+                              ~f:(fun i acc row -> if i > rmax || i <= r then acc else [row.(c)] :: acc))
           |] ; [|
             if config.aggregate_2d
-            then Array.(fold !>(task.data) ~init:[]
-                        ~f:(fun acc row
-                            -> (foldi row ~init:[] ~f:(fun j acc col -> if j >= c then acc else col :: acc)) :: acc))
+            then Array.(foldi !>(task.data) ~init:[]
+                              ~f:(fun i acc row
+                                  -> if i < rmin || i > rmax then acc else (
+                                       foldi row ~init:[] ~f:(fun j acc col -> if j < cmin || j >= c then acc else col :: acc)) :: acc))
             else Array.[foldi !>(task.data).(r) ~init:[]
-                              ~f:(fun i acc col -> if i >= c then acc else col :: acc)]
+                              ~f:(fun j acc col -> if j < cmin || j >= c then acc else col :: acc)]
           |] ; [|
             if config.aggregate_2d
-            then Array.(fold !>(task.data) ~init:[]
-                        ~f:(fun acc row
-                            -> (foldi row ~init:[] ~f:(fun j acc col -> if j <= c then acc else col :: acc)) :: acc))
+            then Array.(foldi !>(task.data) ~init:[]
+                              ~f:(fun i acc row
+                                  -> if i < rmin || i > rmax then acc else (
+                                       foldi row ~init:[] ~f:(fun j acc col -> if j > cmax || j <= c then acc else col :: acc)) :: acc))
             else Array.[foldi !>(task.data).(r) ~init:[]
-                              ~f:(fun i acc col -> if i <= c then acc else col :: acc)]
+                              ~f:(fun j acc col -> if j > cmax || j <= c then acc else col :: acc)]
           |]
         ]
       }
@@ -184,28 +195,33 @@ let apply_col_formula ~(config : Config.t) ~(data : Value.t Matrix.Offsetted.t) 
                                                                  then !>mask.(r).(c) <- col_formula r res.expr))
 
 let apply_range_formula ~(config : Config.t) ~(data : Value.t Matrix.Offsetted.t) ~(mask : string Matrix.Offsetted.t)
+                        ?(rmin :int option = None) ?(rmax :int option = None)
+                        ?(cmin :int option = None) ?(cmax :int option = None)
                         (r : int) (c : int) : (Synthesizer.result option -> unit) =
+  let rmin = Option.value ~default:0 rmin in
+  let rmax = Option.value ~default:(Array.length !>(data) - 1) rmax in
+  let cmin = Option.value ~default:0 cmin in
+  let cmax = Option.value ~default:(Array.length !>(data).(0) - 1) cmax in
   let ot , ol = Matrix.Offsetted.top_left mask in
-  let rlen = Array.length !>mask and clen = Array.length !>mask.(0) in
   let range_formula (e : Expr.t) : string =
     let ranges = if config.top_left_only
                  then begin
                    if config.aggregate_2d
-                   then [| (Excel.Cell.of_rc_ints ot     ol)     ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1) (c+ol))
-                         ; (Excel.Cell.of_rc_ints ot     ol)     ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)   (c+ol-1)) |]
-                   else [| (Excel.Cell.of_rc_ints ot     (c+ol)) ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1) (c+ol))
-                         ; (Excel.Cell.of_rc_ints (r+ot) ol)     ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)   (c+ol-1)) |]
+                   then [| (Excel.Cell.of_rc_ints (rmin+ot) (cmin+ol)) ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1) (c+ol))
+                         ; (Excel.Cell.of_rc_ints (rmin+ot) (cmin+ol)) ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)   (c+ol-1)) |]
+                   else [| (Excel.Cell.of_rc_ints (rmin+ot) (c+ol))    ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1) (c+ol))
+                         ; (Excel.Cell.of_rc_ints (r+ot)    (cmin+ol)) ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)   (c+ol-1)) |]
                  end
                  else begin
                    if config.aggregate_2d
-                   then [| (Excel.Cell.of_rc_ints ot       ol)       ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1)    (clen+ol-1))
-                         ; (Excel.Cell.of_rc_ints (r+ot+1) ol)       ^ ":" ^ (Excel.Cell.of_rc_ints (rlen+ot-1) (clen+ol-1))
-                         ; (Excel.Cell.of_rc_ints ot       ol)       ^ ":" ^ (Excel.Cell.of_rc_ints (rlen+ot-1) (c+ol-1))
-                         ; (Excel.Cell.of_rc_ints ot       (c+ol+1)) ^ ":" ^ (Excel.Cell.of_rc_ints (rlen+ot-1) (clen+ol-1)) |]
-                   else [| (Excel.Cell.of_rc_ints ot       (c+ol))   ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1)    (c+ol))
-                         ; (Excel.Cell.of_rc_ints (r+ot+1) (c+ol))   ^ ":" ^ (Excel.Cell.of_rc_ints (rlen+ot-1) (c+ol))
-                         ; (Excel.Cell.of_rc_ints (r+ot)   ol)       ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)      (c+ol-1))
-                         ; (Excel.Cell.of_rc_ints (r+ot)   (c+ol+1)) ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)      (clen+ol-1)) |]
+                   then [| (Excel.Cell.of_rc_ints (rmin+ot) (cmin+ol)) ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1)  (cmax+ol))
+                         ; (Excel.Cell.of_rc_ints (r+ot+1)  (cmin+ol)) ^ ":" ^ (Excel.Cell.of_rc_ints (rmax+ot) (cmax+ol))
+                         ; (Excel.Cell.of_rc_ints (rmin+ot) (cmin+ol)) ^ ":" ^ (Excel.Cell.of_rc_ints (rmax+ot) (c+ol-1))
+                         ; (Excel.Cell.of_rc_ints (rmin+ot) (c+ol+1))  ^ ":" ^ (Excel.Cell.of_rc_ints (rmax+ot) (cmax+ol)) |]
+                   else [| (Excel.Cell.of_rc_ints (rmin+ot) (c+ol))    ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot-1)  (c+ol))
+                         ; (Excel.Cell.of_rc_ints (r+ot+1)  (c+ol))    ^ ":" ^ (Excel.Cell.of_rc_ints (rmax+ot) (c+ol))
+                         ; (Excel.Cell.of_rc_ints (r+ot)    (cmin+ol)) ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)    (c+ol-1))
+                         ; (Excel.Cell.of_rc_ints (r+ot)    (c+ol+1))  ^ ":" ^ (Excel.Cell.of_rc_ints (r+ot)    (cmax+ol)) |]
                  end
       in "=" ^ (Expr.to_string ranges e)
    in function None -> ()
@@ -260,15 +276,22 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
         ; (if config.last_row_aggregate && rlen > 3
            then (Log.empty_line () ; Log.info (lazy "----< ROW AGGREGATES >----") ; Log.push_indent () ;
                  Lwt_main.run (
-                   Lwt_list.iter_p
-                     (fun last_row -> Lwt_list.iter_p
-                                        (fun c -> if String.is_empty !>mask.(last_row).(c)
-                                                  then let work () = apply_range_formula last_row c (agg_solver (make_range_problem last_row c))
-                                                        in Lwt_preemptive.detach work ()
-                                                  else Lwt.return ())
-                                        (List.range 0 clen))
-                     (List.(filter (range 0 rlen)
-                                   ~f:(fun r -> numeric_row r && (r = rlen - 1 || not (numeric_row (r + 1))))))))
+                   let all_agg_rows = List.(filter (range 0 rlen)
+                                                   ~f:(fun r -> numeric_row r && (r = rlen - 1 || not (numeric_row (r + 1)))))
+                   and last_agg_row = Array.init clen ~f:(fun _ -> 0)
+                    in Log.info (lazy ("# Aggregating on rows: {" ^ (List.to_string_map all_agg_rows ~sep:"," ~f:Int.to_string) ^ "}"))
+                     ; Lwt_list.iter_s
+                         (fun agg_row -> Lwt_list.iter_p
+                                           (fun c -> if String.is_empty !>mask.(agg_row).(c)
+                                                     then let work () =
+                                                            let solution = agg_solver (make_range_problem agg_row c ~rmin:(Some last_agg_row.(c)))
+                                                             in if Option.is_none solution then ()
+                                                                else apply_range_formula agg_row c solution ~rmin:(Some last_agg_row.(c))
+                                                                   ; last_agg_row.(c) <- agg_row
+                                                           in Lwt_preemptive.detach work ()
+                                                     else Lwt.return ())
+                                           (List.range 0 clen))
+                         all_agg_rows))
            else Log.info (lazy "ROW AGGREGATES SKIPPED!"))
         ; (if config.col_pointwise
            then (Log.empty_line () ; Log.info (lazy "----< COL POINTWISE >----") ; Log.push_indent () ;
@@ -282,15 +305,22 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
         ; (if config.last_col_aggregate && clen > 3
            then (Log.empty_line () ; Log.info (lazy "----< COL AGGREGATES >----") ; Log.push_indent () ;
                  Lwt_main.run (
-                   Lwt_list.iter_p
-                     (fun last_col -> Lwt_list.iter_p
-                                        (fun r -> if String.is_empty !>mask.(r).(last_col)
-                                                  then let work () = apply_range_formula r last_col (agg_solver (make_range_problem r last_col))
-                                                        in Lwt_preemptive.detach work ()
-                                                  else Lwt.return ())
-                                        (List.range 0 rlen))
-                     (List.(filter (range 0 clen)
-                                   ~f:(fun c -> numeric_col c && (c = clen - 1 || not (numeric_col (c + 1))))))))
+                   let all_agg_cols = List.(filter (range 0 clen)
+                                                   ~f:(fun c -> numeric_col c && (c = clen - 1 || not (numeric_col (c + 1)))))
+                   and last_agg_col = Array.init rlen ~f:(fun _ -> 0)
+                    in Log.info (lazy ("# Aggregating on columns: {" ^ (List.to_string_map all_agg_cols ~sep:"," ~f:Int.to_string) ^ "}"))
+                     ; Lwt_list.iter_s
+                         (fun agg_col -> Lwt_list.iter_p
+                                           (fun r -> if String.is_empty !>mask.(r).(agg_col)
+                                                     then let work () =
+                                                            let solution = agg_solver (make_range_problem r agg_col ~cmin:(Some last_agg_col.(r)))
+                                                             in if Option.is_none solution then ()
+                                                                else apply_range_formula r agg_col solution ~cmin:(Some last_agg_col.(r))
+                                                                   ; last_agg_col.(r) <- agg_col
+                                                           in Lwt_preemptive.detach work ()
+                                                     else Lwt.return ())
+                                           (List.range 0 rlen))
+                     all_agg_cols))
            else Log.info (lazy "COL AGGREGATES SKIPPED!"))
         ; (if config.row_pointwise
            then (Log.empty_line () ; Log.info (lazy "----< ROW POINTWISE >----") ; Log.push_indent () ;

@@ -3,6 +3,11 @@ open Base
 open Expr
 open Utils
 
+let value_of : Value.t -> float =
+  function [@warning "-8"]
+  | Num x -> x
+  | String "" -> 0.
+
 let translation = [
   {
     name = "num-add";
@@ -19,7 +24,7 @@ let translation = [
                                        -> x =/= y
                                      | _ -> true)
                        | _ -> false);
-    evaluate = Value.(fun [@warning "-8"] [Num x ; Num y] -> Num (x +. y));
+    evaluate = Value.(fun [@warning "-8"] [v1 ; v2] -> Num ((value_of v1) +. (value_of v2)));
     to_string = (fun [@warning "-8"] [a ; b] -> "(" ^ a ^ "+" ^ b ^ ")")
   } ;
   {
@@ -41,7 +46,7 @@ let translation = [
                                        -> x =/= y
                                      | _ -> true)
                        | _ -> false);
-    evaluate = Value.(fun [@warning "-8"] [Num x ; Num y] -> Num (x -. y));
+    evaluate = Value.(fun [@warning "-8"] [v1 ; v2] -> Num ((value_of v1) -. (value_of v2)));
     to_string = (fun [@warning "-8"] [a ; b] -> "(" ^ a ^ "-" ^ b ^ ")")
   }
 ]
@@ -56,7 +61,7 @@ let scaling = [
                          -> (x =/= Constant (Num 0.)) && (x =/= Constant (Num 1.)) && (x =/= Constant (Num (-1.)))
                          && (y =/= Constant (Num 0.)) && (y =/= Constant (Num 1.)) && (x =/= Constant (Num (-1.)))
                        | _ -> false);
-    evaluate = Value.(fun [@warning "-8"] [Num x ; Num y] -> Num (x *. y));
+    evaluate = Value.(fun [@warning "-8"] [v1 ; v2] -> Num ((value_of v1) *. (value_of v2)));
     to_string = (fun [@warning "-8"] [a ; b] -> "(" ^ a ^ "*" ^ b ^ ")")
   } ;
   {
@@ -68,7 +73,7 @@ let scaling = [
                                  && (x =/= Constant (Num 0.)) && (x =/= Constant (Num 1.)) && (x =/= Constant (Num (-1.)))
                                  && (y =/= Constant (Num 0.)) && (y =/= Constant (Num 1.)) && (y =/= Constant (Num (-1.)))
                        | _ -> false);
-    evaluate = Value.(function [@warning "-8"] [Num x ; Num y] -> Num (x /. y));
+    evaluate = Value.(fun [@warning "-8"] [v1 ; v2] -> Num ((value_of v1) /. (value_of v2)));
     to_string = (fun [@warning "-8"] [a ; b] -> "(" ^ a ^ "/" ^ b ^ ")")
   }
 ]
@@ -81,7 +86,7 @@ let conditionals = [
     can_apply = (function
                  | [x ; y] -> (x =/= y) && (not (is_constant x && is_constant y))
                  | _ -> false);
-    evaluate = Value.(fun [@warning "-8"] [Num x ; Num y] -> Bool Float.Approx.(equal x y));
+    evaluate = Value.(fun [@warning "-8"] [v1 ; v2] -> Bool Float.Approx.(equal (value_of v1) (value_of v2)));
     to_string = (fun [@warning "-8"] [a ; b] -> "(" ^ a ^ "=" ^ b ^ ")")
   } ;
   {
@@ -91,7 +96,7 @@ let conditionals = [
     can_apply = (function
                  | [x ; y] -> (x =/= y) && (not (is_constant x && is_constant y))
                  | _ -> false);
-    evaluate = Value.(fun [@warning "-8"] [Num x ; Num y] -> Bool (Float.Approx.compare x y >= 0));
+    evaluate = Value.(fun [@warning "-8"] [v1 ; v2] -> Bool Float.Approx.(compare (value_of v1) (value_of v2) >= 0));
     to_string = (fun [@warning "-8"] [a ; b] -> "(" ^ a ^ ">=" ^ b ^ ")")
   } ;
   {
@@ -101,28 +106,8 @@ let conditionals = [
     can_apply = (function
                  | [x ; y] -> (x =/= y) && (not (is_constant x && is_constant y))
                  | _ -> false);
-    evaluate = Value.(fun [@warning "-8"] [Num x ; Num y] -> Bool (Float.Approx.compare x y <= 0));
+    evaluate = Value.(fun [@warning "-8"] [v1 ; v2] -> Bool Float.Approx.(compare (value_of v1) (value_of v2) <= 0));
     to_string = (fun [@warning "-8"] [a ; b] -> "(" ^ a ^ "<=" ^ b ^ ")")
-  } ;
-  {
-    name = "num-lt";
-    codomain = Type.BOOL;
-    domain = Type.[NUM; NUM];
-    can_apply = (function
-                 | [x ; y] -> (x =/= y) && (not (is_constant x && is_constant y))
-                 | _ -> false);
-    evaluate = Value.(fun [@warning "-8"] [Num x ; Num y] -> Bool (Float.Approx.compare x y < 0));
-    to_string = (fun [@warning "-8"] [a ; b] -> "(" ^ a ^ "<" ^ b ^ ")")
-  } ;
-  {
-    name = "num-gt";
-    codomain = Type.BOOL;
-    domain = Type.[NUM; NUM];
-    can_apply = (function
-                 | [x ; y] -> (x =/= y) && (not (is_constant x && is_constant y))
-                 | _ -> false);
-    evaluate = Value.(fun [@warning "-8"] [Num x ; Num y] -> Bool (Float.Approx.compare x y > 0));
-    to_string = (fun [@warning "-8"] [a ; b] -> "(" ^ a ^ ">" ^ b ^ ")")
   } ;
   {
     name = "num-ite";
@@ -131,8 +116,8 @@ let conditionals = [
     can_apply = (function
                  | [x ; y ; z] -> (not (is_constant x)) && (y =/= z)
                  | _ -> false);
-    evaluate = Value.(fun [@warning "-8"] [Bool x ; Num y ; Num z]
-                      -> Num (if x then y else z));
+    evaluate = Value.(fun [@warning "-8"] [Bool x ; v1 ; v2]
+                      -> Num (if x then (value_of v1) else (value_of v2)));
     to_string = (fun [@warning "-8"] [a ; b ; c] -> "IF(" ^ a ^ "," ^ b ^ "," ^ c ^ ")")
   }
 ]
