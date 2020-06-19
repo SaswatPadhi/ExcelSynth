@@ -22,6 +22,9 @@ let config_flags =
     and col_pointwise               = flag "check-pointwise-col-operations"
                                            (optional_with_default Driver.Config.default.col_pointwise bool)
                                            ~doc:"BOOLEAN synthesize pointwise transformations for columns"
+    and crop_empty_border           = flag "crop-empty-border"
+                                           (optional_with_default Driver.Config.default.crop_empty_border bool)
+                                           ~doc:"BOOLEAN crop out empty rows and columns around the given range"
     and row_pointwise               = flag "check-pointwise-row-operations"
                                            (optional_with_default Driver.Config.default.row_pointwise bool)
                                            ~doc:"BOOLEAN synthesize pointwise transformations for rows"
@@ -43,6 +46,9 @@ let config_flags =
     and max_variable_occurrence     = flag "max-variable-occurrence"
                                            (optional_with_default Driver.Config.default._Synthesizer.max_variable_occurrence int)
                                            ~doc:"INTEGER maximum occurrences of a variable within an expression"
+    and max_aggregation_occurrence  = flag "max-aggregation-occurrence"
+                                           (optional_with_default Driver.Config.default._Synthesizer.max_aggregation_occurrence int)
+                                           ~doc:"INTEGER maximum occurrences of aggregation operators within an expression"
     and max_threads                 = flag "max-threads"
                                            (optional_with_default Driver.Config.default.max_threads int)
                                            ~doc:"INTEGER maximum number of threads to create"
@@ -64,6 +70,7 @@ let config_flags =
           Driver.Config.default with
           aggregate_2d ;
           col_pointwise ;
+          crop_empty_border ;
           last_col_aggregate ;
           last_row_aggregate ;
           max_aggregate_size ;
@@ -78,6 +85,7 @@ let config_flags =
             disable_constant_solutions ;
             large_constant_threshold ;
             max_variable_occurrence ;
+            max_aggregation_occurrence ;
             value_mismatch_threshold ;
           } ;
         } [@warning "-23"]

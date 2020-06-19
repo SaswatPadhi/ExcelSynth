@@ -7,6 +7,7 @@ module Config = struct
   type t = {
     aggregate_2d : bool ;
     col_pointwise : bool ;
+    crop_empty_border : bool ;
     last_col_aggregate : bool ;
     last_row_aggregate : bool ;
     max_aggregate_size : int ;
@@ -20,6 +21,7 @@ module Config = struct
   let default : t = {
     aggregate_2d = false ;
     col_pointwise = true ;
+    crop_empty_border = false ;
     last_col_aggregate = true ;
     last_row_aggregate = true ;
     max_aggregate_size = 8 ;
@@ -228,6 +230,14 @@ let apply_range_formula ~(config : Config.t) ~(data : Value.t Matrix.Offsetted.t
              | Some res -> if can_replace_with_formula !>data.(r).(c) 0 res
                            then !>mask.(r).(c) <- range_formula res.expr
 
+let rec numeric_row (data : Value.t Matrix.t) (r : int) : bool =
+  if r < 0 then numeric_row data ((Array.length data) + r)
+  else Array.exists data.(r) ~f:(fun c -> Type.(equal NUM (Value.typeof c)))
+
+let rec numeric_col (data : Value.t Matrix.t) (c : int) : bool =
+  if c < 0 then numeric_col data ((Array.length data.(0)) + c)
+  else Array.exists data ~f:(fun r -> Type.(equal NUM (Value.typeof r.(c))))
+
 let run_on_values ?(config = Config.default) (task : Value.t task) : string Matrix.t =
   let cols = Array.(fold !!(task.data) ~init:(length !!(task.data).(0))
                          ~f:(fun acc a -> if acc = length a then acc else -1))
@@ -266,18 +276,13 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
         } in try Some (Synthesizer.solve ~config problem)
              with Exceptions.NoSuchFunction -> None
        in
-      let numeric_row r =
-        Array.exists !>(task.data).(r) ~f:(fun c -> Type.(equal NUM (Value.typeof c)))
-       in
-      let numeric_col c =
-        Array.exists !>(task.data) ~f:(fun r -> Type.(equal NUM (Value.typeof r.(c))))
-       in
           Lwt_preemptive.(simple_init () ; set_bounds (0, config.max_threads) ; set_max_number_of_threads_queued 1024)
         ; (if config.last_row_aggregate && rlen > 3
            then (Log.empty_line () ; Log.info (lazy "----< ROW AGGREGATES >----") ; Log.push_indent () ;
                  Lwt_main.run (
                    let all_agg_rows = List.(filter (range 0 rlen)
-                                                   ~f:(fun r -> numeric_row r && (r = rlen - 1 || not (numeric_row (r + 1)))))
+                                                   ~f:(fun r -> numeric_row !>(task.data) r
+                                                             && (r = rlen - 1 || not (numeric_row !>(task.data) (r + 1)))))
                    and last_agg_row = Array.init clen ~f:(fun _ -> 0)
                     in Log.info (lazy ("# Aggregating on rows: {" ^ (List.to_string_map all_agg_rows ~sep:"," ~f:Int.to_string) ^ "}"))
                      ; Lwt_list.iter_s
@@ -287,7 +292,7 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
                                                             let solution = agg_solver (make_range_problem agg_row c ~rmin:(Some last_agg_row.(c)))
                                                              in if Option.is_none solution then ()
                                                                 else apply_range_formula agg_row c solution ~rmin:(Some last_agg_row.(c))
-                                                                   ; last_agg_row.(c) <- agg_row
+                                                                   ; last_agg_row.(c) <- agg_row + 2
                                                            in Lwt_preemptive.detach work ()
                                                      else Lwt.return ())
                                            (List.range 0 clen))
@@ -306,7 +311,8 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
            then (Log.empty_line () ; Log.info (lazy "----< COL AGGREGATES >----") ; Log.push_indent () ;
                  Lwt_main.run (
                    let all_agg_cols = List.(filter (range 0 clen)
-                                                   ~f:(fun c -> numeric_col c && (c = clen - 1 || not (numeric_col (c + 1)))))
+                                                   ~f:(fun c -> numeric_col !>(task.data) c
+                                                             && (c = clen - 1 || not (numeric_col !>(task.data) (c + 1)))))
                    and last_agg_col = Array.init rlen ~f:(fun _ -> 0)
                     in Log.info (lazy ("# Aggregating on columns: {" ^ (List.to_string_map all_agg_cols ~sep:"," ~f:Int.to_string) ^ "}"))
                      ; Lwt_list.iter_s
@@ -316,7 +322,7 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
                                                             let solution = agg_solver (make_range_problem r agg_col ~cmin:(Some last_agg_col.(r)))
                                                              in if Option.is_none solution then ()
                                                                 else apply_range_formula r agg_col solution ~cmin:(Some last_agg_col.(r))
-                                                                   ; last_agg_col.(r) <- agg_col
+                                                                   ; last_agg_col.(r) <- agg_col + 2
                                                            in Lwt_preemptive.detach work ()
                                                      else Lwt.return ())
                                            (List.range 0 rlen))
@@ -332,6 +338,29 @@ let run_on_values ?(config = Config.default) (task : Value.t task) : string Matr
                  Log.pop_indent ())
            else Log.info (lazy "ROW POINTWISE SKIPPED!"))
         ; Matrix.Offsetted.commit mask
+
+let crop_t (data : Value.t Matrix.Offsetted.t ref) : bool =
+  if numeric_row !>(!data) 0 then false
+  else (data := Matrix.Offsetted.drop_top !data ; true)
+
+let crop_r (data : Value.t Matrix.Offsetted.t ref) : bool =
+  if numeric_col !>(!data) (-1) then false
+  else (data := Matrix.Offsetted.drop_right !data ; true)
+
+let crop_b (data : Value.t Matrix.Offsetted.t ref) : bool =
+  if numeric_row !>(!data) (-1) then false
+  else (data := Matrix.Offsetted.drop_bottom !data ; true)
+
+let crop_l (data : Value.t Matrix.Offsetted.t ref) : bool =
+  if numeric_col !>(!data) 0 then false
+  else (data := Matrix.Offsetted.drop_left !data ; true)
+
+let rec crop (data : Value.t Matrix.Offsetted.t ref) : Value.t Matrix.Offsetted.t =
+  if crop_t data then crop data else
+  if crop_r data then crop data else
+  if crop_b data then crop data else
+  if crop_l data then crop data else
+  !data
 
 let run ?(config = Config.default) (task : string task) : string Matrix.t =
   let cols = Array.(fold !!(task.data) ~init:(length !!(task.data).(0))
@@ -351,6 +380,7 @@ let run ?(config = Config.default) (task : string task) : string Matrix.t =
           ; let data = Matrix.Offsetted.(create (Array.(map !!(task.data) ~f:(map ~f:Value.of_string)))
                                                 ~top_left:(Some (top_left task.data))
                                                 ~bottom_right:(Some (bottom_right task.data)))
-             in let mask = run_on_values ~config { task with data ; mask = (Some mask) }
+             in let data = if config.crop_empty_border then crop (ref data) else data in
+                let mask = run_on_values ~config { task with data ; mask = (Some mask) }
                  in Array.(map mask ~f:(map ~f:(fun s -> if String.equal s "<empty>" then "" else s)))
       end

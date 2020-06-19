@@ -40,9 +40,9 @@ for opt in "$@"; do
   case "$opt" in
     "--only-compare")   set -- "$@" "-c" ;;
 
-    "--")                      set -- "$@" "--" ;;
-    "--"*)                     usage "Unrecognized option: $opt." ;;
-    *)                         set -- "$@" "$opt"
+    "--")               set -- "$@" "--" ;;
+    "--"*)              usage "Unrecognized option: $opt." ;;
+    *)                  set -- "$@" "$opt"
   esac
 done
 
@@ -76,10 +76,8 @@ FULL_COMPARISON_MASKS_DIR="$DATA_DIR/comparison_masks/full"
 TABLE_COMPARISON_MASKS_DIR="$DATA_DIR/comparison_masks/in-table"
 
 if [ "$ONLY_COMPARE" == "yes" ]; then
-  verify dir "$EXTRACTED_MASKS_DIR"
   verify dir "$RECOVERED_MASKS_DIR"
 else
-  mkdir -p "$EXTRACTED_MASKS_DIR"
   mkdir -p "$RECOVERED_MASKS_DIR"
 fi
 
@@ -109,7 +107,13 @@ fi
 
 TABLE_SOURCES=("${TABLE_SOURCES[@]:1}")
 
-"$EXTRACT_MASK" -i "$FORMULA_CSVS_DIR" -o "$EXTRACTED_MASKS_DIR"
+recreate_dir "$EXTRACTED_MASKS_DIR"
+
+"$EXTRACT_MASK" -i "$FORMULA_CSVS_DIR" \
+                -o "$EXTRACTED_MASKS_DIR" \
+                -f "$DATA_DIR/filtered.txt" \
+                -p "$DATA_DIR/formula_freq.png" \
+  |& tee "$DATA_DIR/extraction.log"
 
 recreate_dir "$FULL_COMPARISON_MASKS_DIR/Baseline"
 
@@ -118,6 +122,7 @@ if [ "$ONLY_COMPARE" != "yes" ]; then
 
   "$RECOVER_MASK" -e "$EVALUATED_CSVS_DIR" \
                   -o "$RECOVERED_MASKS_DIR/Baseline" \
+                  -f "$DATA_DIR/filtered.txt" \
                   -c "-1" \
                   "$TABLE_RANGES_FILE" \
     |& tee "$DATA_DIR/formula_recovery_Baseline.log"
@@ -141,6 +146,7 @@ for i in "${!TABLE_SOURCES[@]}"; do
 
     "$RECOVER_MASK" -e "$EVALUATED_CSVS_DIR" \
                     -o "$RECOVERED_MASKS_DIR/$TABLE_SOURCE" \
+                    -f "$DATA_DIR/filtered.txt" \
                     -c $((i+1)) \
                     "$TABLE_RANGES_FILE" \
       |& tee "$DATA_DIR/formula_recovery_$TABLE_SOURCE.log"

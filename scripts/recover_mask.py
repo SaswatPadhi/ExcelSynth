@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from shutil import copy2 as copyfile
 from tempfile import mkstemp
+from time import time_ns
 
 ROOT_PATH = Path(__file__).parent.parent.absolute()
 
@@ -23,6 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--eval-csv-dir', type=dir_path, required=True)
     parser.add_argument('-o', '--output-dir', type=dir_path, required=True)
     parser.add_argument('-c', '--table-range-column', type=int, required=True)
+    parser.add_argument('-f', '--filtered-files-path', type=argparse.FileType('r'), required=False)
     parser.add_argument('tables_data_csv', type=argparse.FileType('r'), nargs=1)
     args = parser.parse_args()
 
@@ -44,17 +46,19 @@ if __name__ == '__main__':
                 logging.warning(f'Skipped missing file "{e_csv_path.name}"')
                 continue
 
+            if e_csv_path not in todo:
+                todo[e_csv_path] = set()
+
             table = row[args.table_range_column].strip()
             if not table or table == '<null>':
                 logging.warning(f'Skipped an empty range in "{e_csv_path.name}" -- see line {i}')
-                if e_csv_path not in todo:
-                    todo[e_csv_path] = set()
                 continue
 
-            if e_csv_path in todo:
-                todo[e_csv_path].add(table)
-            else:
-                todo[e_csv_path] = {table}
+            todo[e_csv_path].add(table)
+
+    if args.filtered_files_path is not None:
+        filtered_files = [s.strip() for s in args.filtered_files_path.readlines()]
+        todo = {k:v for k,v in todo.items() if k.name in filtered_files}
 
     logging.info('')
     _, tmp_r_path = mkstemp()
@@ -67,6 +71,7 @@ if __name__ == '__main__':
 
         for t, (e_csv_path, data) in enumerate(todo.items()):
             fm_out_path = args.output_dir.joinpath(e_csv_path.name)
+
             logging.info(f'@ {t+1:03} / {total:03} : "{e_csv_path.name}"')
             logging.info(f' `-- Writing to "{fm_out_path}"')
 
@@ -87,10 +92,13 @@ if __name__ == '__main__':
                 except Exception as e:
                     logging.error(f'      `-- Failed to recover the formula mask!')
                     logging.exception(e)
+                with open(f'{fm_out_path}.time', 'w') as time_file:
+                    time_file.write('inf')
                 continue
 
+            start_time = time_ns()
             for i, table in enumerate(data):
-                logging.info(f' `-- Inspecting range [{table}] ...')
+                logging.info(f' `-- Inspecting table {i+1:2d} of {len(data):2d} :: [{table}] ...')
                 if table == 'FULL_SHEET':
                     cmdline = f'dune exec bin/App.exe "{e_csv_path}"'
                 else:
@@ -112,6 +120,9 @@ if __name__ == '__main__':
                 except Exception as e:
                     logging.error(f'      `-- Failed to recover the formula mask!')
                     logging.exception(e)
+            end_time = time_ns()
+            with open(f'{fm_out_path}.time', 'w') as time_file:
+                time_file.write(f'{(end_time - start_time)/1e9:.2f}')
             logging.info('')
     finally:
         Path(tmp_r_path).unlink()

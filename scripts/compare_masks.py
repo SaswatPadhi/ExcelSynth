@@ -27,7 +27,7 @@ def dir_path(string):
 def contains(col, row, tl, br):
     return (tl[0] <= col <= br[0]) and (tl[1] <= row <= br[1])
 
-def print_stats(label, tables, tp, fp, fn, atp, afp, afn):
+def print_stats(label, tables, time_s, cells, tp, fp, fn, atp, afp, afn):
     if tp + fp > 0:
         precision = tp / (tp + fp)
         precision_str = f'{precision:5.3f}'
@@ -54,22 +54,25 @@ def print_stats(label, tables, tp, fp, fn, atp, afp, afn):
         a_recall = -1
         a_recall_str = '  X  '
 
-    print(f'{label:80},  {tables:3}  ,  {tp:5d}  ,  {atp:5d}  ,  {fp:5d}  ,  {afp:5d}  ,  {fn:5d}  ,  {afn:5d}  ,'
+    print(f'{label:80},  {tables:3}  , {time_s:7.1f} , {cells:7d} ,'
+          f'  {tp:5d}  ,  {atp:5d}  ,  {fp:5d}  ,  {afp:5d}  ,  {fn:5d}  ,  {afn:5d}  ,'
           f'  {precision_str}  ,  {a_precision_str}  ,  {recall_str}  ,  {a_recall_str}  ', end=',')
 
-    if precision > 0 and recall > 0:
+    if precision + recall > 0:
         fscore = (2 * precision * recall) / (precision + recall)
-        if a_precision > 0 and a_recall > 0:
+        if a_precision + a_recall > 0:
             a_fscore = (2 * a_precision * a_recall) / (a_precision + a_recall)
             print(f'  {fscore:5.3f}  ,  {a_fscore:5.3f}  ')
         else:
             print(f'  {fscore:5.3f}  ,    X    ')
     else:
-        if a_precision > 0 and a_recall > 0:
+        if a_precision + a_recall > 0:
             a_fscore = (2 * a_precision * a_recall) / (a_precision + a_recall)
             print(f'    X    ,  {a_fscore:5.3f}  ')
         else:
             print(f'    X    ,    X    ')
+
+    return (precision, recall, a_precision, a_recall)
 
 EXCEL_VAR_REGEX = re.compile(r'[A-Z]+[0-9]+')
 
@@ -97,27 +100,27 @@ if __name__ == '__main__':
         if not gt_path.is_file():
             continue
 
+        if gt_path not in gt_tables_count:
+            gt_tables_count[gt_path] = 0
+
         gt_table = row[args.ground_truth_table_column].strip()
         if gt_table and gt_table != '<null>':
-            if gt_path in gt_tables_count:
-                gt_tables_count[gt_path] += 1
-            else:
-                gt_tables_count[gt_path] = 1
+            gt_tables_count[gt_path] += 1
+
+        if gt_path not in todo:
+            todo[gt_path] = set()
 
         if args.table_range_column is not None:
             table = row[args.table_range_column].strip()
             if not table or table == '<null>':
-                if gt_path not in todo:
-                    todo[gt_path] = set()
                 continue
 
-            table = cr_range_to_tuple(table)
-            if gt_path in todo:
-                todo[gt_path].add(table)
-            else:
-                todo[gt_path] = {table}
+            todo[gt_path].add(cr_range_to_tuple(table))
         else:
             todo[gt_path] = None
+
+    gt_tables_count = {path:table_count for path, table_count in gt_tables_count.items() if table_count > 0}
+    todo = {path:tables for path, tables in todo.items() if path in gt_tables_count}
 
     TABLES, S_TABLES, M_TABLES = 0, 0, 0
     for _, table_count in gt_tables_count.items():
@@ -127,17 +130,19 @@ if __name__ == '__main__':
         else:
             S_TABLES += table_count
 
+    CELLS, S_CELLS, M_CELLS = 0, 0, 0
+    TIME_S, S_TIME_S, M_TIME_S = 0, 0, 0
     TP, FP, FN, A_TP, A_FP, A_FN = 0, 0, 0, 0, 0, 0
     S_TP, S_FP, S_FN, A_S_TP, A_S_FP, A_S_FN = 0, 0, 0, 0, 0, 0
     M_TP, M_FP, M_FN, A_M_TP, A_M_FP, A_M_FN = 0, 0, 0, 0, 0, 0
 
-    print(f'{"FILENAME":80}, TABLES, TRUE_POS, ADJ_T_P ,FALSE_POS, ADJ_F_P ,FALSE_NEG, ADJ_F_N ,PRECISION, ADJ_PREC,  RECALL , ADJ_REC , F1-SCORE, ADJ_F-1 ')
-    print(f'''{'='*80},{'='*7}{f",{'-'*9},{'~'*9}"*6}''')
+    print(f'{"FILENAME":80}, TABLES, TIME_SEC,NUM_CELLS, TRUE_POS, ADJ_T_P ,FALSE_POS, ADJ_F_P ,FALSE_NEG, ADJ_F_N ,PRECISION, ADJ_PREC,  RECALL , ADJ_REC , F1-SCORE, ADJ_F-1 ')
+    print(f'''{'='*80},{'='*7},{'='*9},{'='*9}{f",{'-'*9},{'~'*9}"*6}''')
 
     for gt_path, tables in todo.items():
         pred_path = args.prediction_dir.joinpath(gt_path.name)
         if not pred_path.is_file():
-            print(f'{gt_path.name:80},  {gt_tables_count[gt_path]:3}  {",  ? ? ?  "*12}')
+            print(f'{gt_path.name:80},  {gt_tables_count[gt_path]:3}  {",  ? ? ?  "*14}')
             continue
 
         with open(gt_path, 'r') as gt_file:
@@ -146,10 +151,30 @@ if __name__ == '__main__':
             pred_data = list(csv.reader(pred_file))
 
         if len(gt_data) != len(pred_data) or any(len(g) != len(p) for (g,p) in zip(gt_data,pred_data)):
-            print(f'{gt_path.name:80}, ERROR {",     ERROR     "*6}')
+            print(f'{gt_path.name:80},  {gt_tables_count[gt_path]:3}  {",  ERROR  "*14}')
             continue
 
         out_data = [['' for gt_cell in gt_row] for gt_row in gt_data]
+
+        cell_count = len(out_data) * len(out_data[0])
+        CELLS += cell_count
+        if gt_tables_count[gt_path] > 1:
+            M_CELLS += cell_count
+        else:
+            S_CELLS += cell_count
+
+        time_s = 0.0
+        try:
+            with open(f'{pred_path}.time', 'r') as time_file:
+                time_s = float(time_file.readlines()[0].strip())
+            if time_s != float('inf'):
+                TIME_S += time_s
+                if gt_tables_count[gt_path] > 1:
+                    M_TIME_S += time_s
+                else:
+                    S_TIME_S += time_s
+        except Exception:
+            time = float('inf')
 
         def dependencies(c,r,seen):
             seen.add((c,r))
@@ -197,7 +222,7 @@ if __name__ == '__main__':
                     out_data[r][c] = f'{cell:^6}'
             output_mask_csv.writerows(out_data)
 
-        print_stats(gt_path.name, gt_tables_count[gt_path], tp, fp, fn, atp, afp, afn)
+        print_stats(gt_path.name, gt_tables_count[gt_path], time_s, cell_count, tp, fp, fn, atp, afp, afn)
 
         TP, FP, FN = TP + tp, FP + fp, FN + fn
         A_TP, A_FP, A_FN = A_TP + atp, A_FP + afp, A_FN + afn
@@ -209,7 +234,7 @@ if __name__ == '__main__':
             S_TP, S_FP, S_FN = S_TP + tp, S_FP + fp, S_FN + fn
             A_S_TP, A_S_FP, A_S_FN = A_S_TP + atp, A_S_FP + afp, A_S_FN + afn
 
-    print(f'''{'='*80},{'='*7}{f",{'-'*9},{'~'*9}"*6}''')
-    print_stats('MICRO_AGG', TABLES, TP, FP, FN, A_TP, A_FP, A_FN)
-    print_stats('MICRO_AGG::SINGLE_TABLE_SHEETS', S_TABLES, S_TP, S_FP, S_FN, A_S_TP, A_S_FP, A_S_FN)
-    print_stats('MICRO_AGG::MULTI_TABLE_SHEETS', M_TABLES, M_TP, M_FP, M_FN, A_M_TP, A_M_FP, A_M_FN)
+    print(f'''{'='*80},{'='*7},{'='*9},{'='*9}{f",{'-'*9},{'~'*9}"*6}''')
+    print_stats('MICRO_AGG', TABLES, TIME_S, CELLS, TP, FP, FN, A_TP, A_FP, A_FN)
+    print_stats('MICRO_AGG::SINGLE_TABLE_SHEETS', S_TABLES, S_TIME_S, S_CELLS, S_TP, S_FP, S_FN, A_S_TP, A_S_FP, A_S_FN)
+    print_stats('MICRO_AGG::MULTI_TABLE_SHEETS', M_TABLES, M_TIME_S, M_CELLS, M_TP, M_FP, M_FN, A_M_TP, A_M_FP, A_M_FN)

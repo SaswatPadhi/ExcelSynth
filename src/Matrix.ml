@@ -32,6 +32,22 @@ module Offsetted = struct
   let bottom_right ((Offsetted (_ , _ , br , _)) : 'a T.t) : int * int = br
   [@@inline always]
 
+  let drop_top ((Offsetted (mat , (t,l) , br , submat)) : 'a T.t) : 'a T.t =
+    Offsetted (mat, (t+1,l), br, Array.(slice submat 1 0))
+  [@@inline always]
+
+  let drop_right ((Offsetted (mat , tl , (b,r) , submat)) : 'a T.t) : 'a T.t =
+    Offsetted (mat, tl, (b,r-1), Array.(map submat ~f:(fun a -> slice a 0 (-1))))
+  [@@inline always]
+
+  let drop_bottom ((Offsetted (mat , tl , (b,r) , submat)) : 'a T.t) : 'a T.t =
+    Offsetted (mat, tl, (b-1,r), Array.(slice submat 0 (-1)))
+  [@@inline always]
+
+  let drop_left ((Offsetted (mat , (t,l) , br , submat)) : 'a T.t) : 'a T.t =
+    Offsetted (mat, (t,l+1), br, Array.(map submat ~f:(fun a -> slice a 1 0)))
+  [@@inline always]
+
   include T
 end
 

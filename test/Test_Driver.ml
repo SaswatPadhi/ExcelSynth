@@ -149,7 +149,7 @@ let range_bound_test () =
 let large_constant_test () =
   let result = run_on_values {
     constants = [] ;
-    data = Matrix.Offsetted.create Value.[|
+    data = Matrix.Offsetted.create ~top_left:(Some (1,1)) Value.[|
       [| String "HEAD"    ; String "Col 1" ; String "Col 2" ; String "Col 3" ; String "Col 4" ; String "Col 5" |] ;
       [| String "Row 1"   ; Num 1.         ; Num 10.        ; Num 9.5        ; Num 24.        ; Num 9500.      |] ;
       [| String "Row 2"   ; Num 23.        ; Num 12.        ; Num 0.5        ; Num 35.        ; Num 500.       |] ;

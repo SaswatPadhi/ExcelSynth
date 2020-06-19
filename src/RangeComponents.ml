@@ -97,3 +97,9 @@ let levels = Array.accumulate_lists [|
   drop_head ;
   drop_tail
 |]
+
+let aggregation_levels = Array.accumulate_lists [|
+  aggregates ;
+  uncommon_aggregates ;
+  rare_aggregates
+|]

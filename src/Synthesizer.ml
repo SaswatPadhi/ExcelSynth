@@ -44,7 +44,7 @@ module Config = struct
     order = (fun g_size e_size -> (Int.to_float e_size) *. (Float.log (Int.to_float g_size))) ;
     size_limit = 9 ;
     arg_type_mismatch_threshold = 0.6 ;
-    value_mismatch_threshold = 0.1 ;
+    value_mismatch_threshold = 0.05 ;
   }
 end
 
@@ -130,6 +130,15 @@ let var_occurrence_bad ~(config : Config.t) (expr : Expr.t) : bool =
   let var_frequencies = List.group ~break:(<>) (Expr.extract_variables expr)
    in List.(exists var_frequencies
                    ~f:(fun l -> length l > config.max_variable_occurrence))
+
+(* 
+let app_occurrence_bad ~(config : Config.t) (expr : Expr.t) : bool =
+  let agg_app_count = List.(fold (Expr.extract_applications expr) ~init:0
+                                 ~f:(fun acc name -> if exists (Array.last RangeComponents.aggregation_levels)
+                                                               ~f:(fun (c : Expr.component) -> String.equal c.name name)
+                                                     then acc + 1 else acc))
+   in agg_app_count > config.max_aggregation_occurrence
+ *)
 
 let app_occurrence_bad ~(config : Config.t) (expr : Expr.t) : bool =
   let app_frequencies = List.group ~break:String.(<>) (Expr.extract_applications expr)

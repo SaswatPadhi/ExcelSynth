@@ -17,12 +17,16 @@ if __name__ == '__main__':
 
     for f in xlsx.glob('*.xlsx'):
         if f.name.startswith('~$'): continue
-        print(f)
 
-        wb = load_workbook(f)
-        ws = wb.worksheets[0]
-        wb_cached = load_workbook(f, data_only=True)
-        ws_cached = wb_cached.worksheets[0]
+        try:
+            wb = load_workbook(f)
+            ws = wb.worksheets[0]
+            wb_cached = load_workbook(f, data_only=True)
+            ws_cached = wb_cached.worksheets[0]
+        except Exception as _:
+            continue
+
+        print(f)
 
         data = [['' for _ in range(ws.max_column)] for _ in range(ws.max_row)]
         cached_formulae = {}
